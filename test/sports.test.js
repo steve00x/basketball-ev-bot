@@ -40,6 +40,9 @@ test('sport groups and Odds API key expansion', () => {
   const r = resolveSportKeys(['icehockey', 'tennis', 'volleyball', 'basketball_nba', 'baseball_mlb'], active);
   assert.deepEqual(r.keys, ['icehockey_nhl', 'tennis_atp_finals', 'basketball_nba']);
   assert.deepEqual(r.missing, ['volleyball', 'baseball_mlb']);
+  // leagues that can never pair with Betika aren't paid for
+  const r2 = resolveSportKeys(['cricket', 'rugby'], [{ key: 'cricket_test_match' }, { key: 'cricket_big_bash' }, { key: 'rugbyleague_nrl' }]);
+  assert.deepEqual([r2.keys, r2.missing], [['cricket_big_bash'], ['rugby']]);
 });
 
 test('only comparable markets are bought per sport', () => {

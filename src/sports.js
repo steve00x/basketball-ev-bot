@@ -48,6 +48,7 @@ export const SPORTS = {
   cricket: {
     // Limited-overs only in practice: Test matches have a draw, so they never pair.
     title: 'Cricket', betikaSportId: 37, oddsApiPrefixes: ['cricket_'],
+    skipKeys: /test_match/, // 3-way (draw) on Pinnacle vs Betika's 2-way: never pairs, so don't pay for it
     oddsMarkets: ['h2h'],
     h2h: { subType: 340, title: 'Winner (Incl. Super Over)', draw: false },
   },
@@ -63,7 +64,8 @@ export const SPORTS = {
   },
   rugby: {
     // Betika only offers a regulation-time 1X2. Pairs only with 3-way Pinnacle lines.
-    title: 'Rugby', betikaSportId: 41, oddsApiPrefixes: ['rugbyunion_', 'rugbyleague_'],
+    // Rugby league moneylines are 2-way, so they never pair with Betika's 1X2: union only.
+    title: 'Rugby', betikaSportId: 41, oddsApiPrefixes: ['rugbyunion_'],
     oddsMarkets: ['h2h'],
     h2h: { subType: 1, title: '1x2', draw: true },
   },
@@ -108,7 +110,7 @@ export function resolveSportKeys(entries, active) {
       if (!ks.length) missing.push(e);
     } else if (e === 'soccer_all' || SPORTS[e]) {
       const spec = SPORTS[e === 'soccer_all' ? 'soccer' : e];
-      const ks = activeKeys.filter((k) => spec.oddsApiPrefixes.some((p) => k.startsWith(p)));
+      const ks = activeKeys.filter((k) => spec.oddsApiPrefixes.some((p) => k.startsWith(p)) && !spec.skipKeys?.test(k));
       ks.forEach((k) => keys.add(k));
       if (!ks.length) missing.push(e);
     } else if (activeKeys.includes(e)) {
