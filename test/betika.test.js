@@ -173,6 +173,6 @@ test('unmatched reasons: missing game vs. similar names', () => {
   const betika = [{ parentMatchId: 'c', home: 'Chicago', away: 'Cleveland', competition: 'NBA', start: at, winner: [2, 2], totals: [] },
     { parentMatchId: 'h', home: 'Houston', away: 'LAC Clips', competition: 'NBA', start: at, winner: [2, 2], totals: [] }];
   const r = attachBetikaOdds([ev('Sacramento Kings', 'San Antonio Spurs'), ev('Houston Rockets', 'Los Angeles Clippers')], betika);
-  assert.equal(r.unmatched[0], 'San Antonio Spurs @ Sacramento Kings (not on Betika yet)');
+  assert.equal(r.unmatched[0], 'San Antonio Spurs @ Sacramento Kings (not on Betika right now)');
   assert.match(r.unmatched[1], /names did not match - Betika has "Houston v LAC Clips"/);
 });

@@ -27,7 +27,7 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
         teamSimilarity(ev.away_team, m.home), teamSimilarity(ev.away_team, m.away));
       const near = candidates.map((m) => ({ m, s: score(m) })).sort((a, b) => b.s - a.s)[0];
       unmatched.push(`${ev.away_team} @ ${ev.home_team}`
-        + (near && near.s >= 0.5 ? ` (names did not match - Betika has "${near.m.home} v ${near.m.away}")` : ' (not on Betika yet)'));
+        + (near && near.s >= 0.5 ? ` (names did not match - Betika has "${near.m.home} v ${near.m.away}")` : ' (not on Betika right now)'));
       continue;
     }
     const m = hit.row;
