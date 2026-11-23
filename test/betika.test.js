@@ -221,3 +221,20 @@ test('BETIKA_FIXED_STAKE: every bet is the same stake, small edges included', as
   assert.deepEqual(sent, [40, 40]);
   assert.equal((await ex.execute(fakeOpp({ eventId: 3 }))).reason, 'daily_stake_limit'); // 80 + 40 > 100
 });
+
+test('an opportunity alerted earlier but not bet is retried on later scans', async () => {
+  const store = new Store(':memory:');
+  const feed = new DemoBetikaFeed();
+  const placer = new DemoBetikaPlacer(feed);
+  const run = (s) => runCycle({ events: loadDemoEvents(), s, store, notifier: new Notifier(s, { quiet: true }), betika: feed,
+    executor: new BetikaExecutor(s, placer, store, { log: quiet }), log: quiet });
+  const small = makeSettings({ betikaEnabled: true, betikaLive: true, bankroll: 100 }); // Kelly stakes < KES 10: skipped
+  const first = await run(small);
+  assert.ok(first.results.every((r) => r.result.reason === 'stake_too_small'));
+  placer.placeBet = async (b) => ({ status: 'placed', odds: 2.6, confirmedStake: b.stake });
+  const second = await run({ ...small, betikaFixedStake: 40 });
+  assert.equal(second.opps.length, 0); // no new alerts...
+  assert.ok(second.results.length >= 1 && second.results.every((r) => r.result.status === 'placed')); // ...but bets placed
+  const third = await run({ ...small, betikaFixedStake: 40 });
+  assert.ok(third.results.every((r) => r.result.reason === 'already_bet')); // never twice
+});

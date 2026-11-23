@@ -1,6 +1,7 @@
 // Match Betika's team names ("LA Lakers") to The Odds API's ("Los Angeles Lakers").
 
-const STOPWORDS = new Set(['fc', 'bc', 'bk', 'kk', 'basketball', 'basket', 'club', 'the', 'team', 'and', 'of']);
+const STOPWORDS = new Set(['fc', 'bc', 'bk', 'kk', 'sk', 'sc', 'afc', 'cf', 'basketball', 'basket', 'basquet',
+  'basketbol', 'club', 'the', 'team', 'and', 'of']);
 
 // Same word, different spelling: "Indiana State" = "Indiana St", "Saint Mary's" = "St Mary's",
 // "N. Florida" = "North Florida", "NY Islanders" = "New York Islanders". Values may be several words.
@@ -9,6 +10,9 @@ const TOKEN_SYNONYMS = {
   olympiakos: 'olympiacos', milano: 'milan', munchen: 'munich', munich: 'munich',
   n: 'north', s: 'south', e: 'east', w: 'west', no: 'north', so: 'south',
   cent: 'central', centr: 'central', chi: 'chicago', ny: 'new york', nj: 'new jersey',
+  // English-football short forms: "Sheffield Utd/Wed", "Man City", "Nott'm Forest", "West Brom"
+  utd: 'united', wed: 'wednesday', weds: 'wednesday', man: 'manchester', nottm: 'nottingham', brom: 'bromwich',
+  atl: 'atletico', ath: 'athletic',
   tenn: 'tennessee', unc: 'nc', nku: 'northern kentucky', utep: 'texas el paso',
   utsa: 'texas san antonio', uab: 'alabama birmingham', ucf: 'central florida', fiu: 'florida int',
 };
@@ -40,6 +44,13 @@ export const ALIASES = {
   'fenerbahce beko': 'fenerbahce', 'fenerbahce beko istanbul': 'fenerbahce',
   'ea7 emporio armani milan': 'olimpia milan', 'armani milan': 'olimpia milan', 'ax armani exchange milan': 'olimpia milan',
   'zalgiris kaunas': 'zalgiris', 'partizan belgrade': 'partizan', 'virtus bologna': 'bologna',
+  // Soccer
+  'wolves': 'wolverhampton wanderers', 'spurs': 'tottenham hotspur', 'qpr': 'queens park rangers',
+  'mk dons': 'milton keynes dons', 'psg': 'paris st germain', 'paris sg': 'paris st germain',
+  'west brom': 'west bromwich albion', 'man utd': 'manchester united', 'man united': 'manchester united',
+  'fenerbahce istanbul': 'fenerbahce', 'galatasaray istanbul': 'galatasaray', 'besiktas istanbul': 'besiktas',
+  // NCAA
+  'miami florida': 'miami hurricanes', 'miami fl': 'miami hurricanes',
   // Ice hockey
   'sport': 'vaasan sport', 'vaasan': 'vaasan sport', 'vaasa sport': 'vaasan sport',
   'asvel villeurbanne': 'asvel', 'ldlc asvel': 'asvel', 'baskonia vitoria': 'baskonia', 'kosner baskonia': 'baskonia',

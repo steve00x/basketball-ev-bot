@@ -37,7 +37,7 @@ export class BetikaExecutor {
       : Math.floor(Math.min(opp.stake, this.s.betikaMaxStake));
     const skip = this.check(opp, stake);
     if (skip) {
-      if (skip !== 'not_betika') this.log.info?.(`betika: skip ${selection(opp)} (${skip})`);
+      if (!['not_betika', 'already_bet'].includes(skip)) this.log.info?.(`betika: skip ${selection(opp)} (${skip})`);
       return { status: 'skipped', reason: skip };
     }
     // Lowest after-tax price that still clears MIN_EV, and the posted price that gives it.
@@ -78,7 +78,10 @@ export class BetikaExecutor {
     const msg = `Betika ${result.status.toUpperCase()}${ticket}: ${selection(opp)} (${matchup(opp)}) `
       + `stake KES ${stake} @ ${result.odds ?? '?'} (min ${bet.minOdds})${bal}${result.message && result.status !== 'placed' ? ` - ${result.message}` : ''}`;
     this.log.info?.(msg);
-    if (result.status !== 'dry_run' || this.s.betikaLive) await this.notify(msg);
+    // Phone/Discord alerts only for outcomes that matter; price moves etc. retry quietly next scan.
+    if (['placed', 'unknown', 'rejected', 'error', 'not_logged_in', 'insufficient_balance'].includes(result.status)) {
+      await this.notify(msg);
+    }
     // An unconfirmed click may have placed the bet. It's recorded as possibly placed, so this
     // match is never bet again and it counts toward the daily limits; other matches continue.
     if (result.status === 'unknown') {

@@ -189,7 +189,9 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
 
   const results = [];
   if (executor) {
-    for (const o of fresh) if (o.book === 'betika') results.push({ opp: o, result: await executor.execute(o) });
+    // Every current opportunity not yet bet gets a try, not only new alerts: one skipped earlier
+    // (stake too small, price moved, error) can qualify now. Already-placed bets are skipped.
+    for (const o of opps) if (o.book === 'betika') results.push({ opp: o, result: await executor.execute(o) });
   }
   return { opps: fresh, results };
 }

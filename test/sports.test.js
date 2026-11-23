@@ -178,3 +178,12 @@ test('free events check skips leagues with no games (no credits spent on them)',
   await fetchEvents(new OddsAPI('k', { fetchImpl }), s, quiet);
   assert.deepEqual(calls.filter((p) => p.endsWith('/odds')), ['/v4/sports/soccer_epl/odds']); // spl had no games: not paid for
 });
+
+test('English football and other short forms from a real scan', () => {
+  for (const [a, b] of [['Sheffield United', 'Sheffield Utd'], ['Sheffield Wednesday', 'Sheffield Wed'], ['Manchester City', 'Man City'],
+    ['Wolverhampton Wanderers', 'Wolves'], ['Miami Hurricanes', 'Miami-Florida'], ['Fenerbahce SK', 'Fenerbahce Istanbul'],
+    ['FC Barcelona Bàsquet', 'Barcelona']]) assert.ok(teamSimilarity(a, b) >= 0.75, `${a} vs ${b}`);
+  for (const [a, b] of [['Manchester City', 'Manchester United'], ['Sheffield United', 'Sheffield Wednesday'], ['Miami (OH) RedHawks', 'Miami-Florida']]) {
+    assert.ok(teamSimilarity(a, b) < 0.75, `${a} vs ${b}`);
+  }
+});
