@@ -187,3 +187,52 @@ test('English football and other short forms from a real scan', () => {
     assert.ok(teamSimilarity(a, b) < 0.75, `${a} vs ${b}`);
   }
 });
+
+test('Double Chance and Draw No Bet: parsed from one listing, priced from Pinnacle 1X2, right buttons', async () => {
+  const odds = [
+    { sub_type_id: '1', name: '1X2', odds: x12(2.2, 3.6, 3.4) },
+    { sub_type_id: '10', name: 'DOUBLE CHANCE', odds: [{ display: '1/X', odd_value: '1.40' }, { display: 'X/2', odd_value: '1.80' }, { display: '1/2', odd_value: '1.30' }] },
+    { sub_type_id: '11', name: 'WHO WILL WIN? (IF DRAW, MONEY BACK)', odds: w12(1.70, 2.40) }];
+  const listing = { data: [{ ...row('d1', 'Brentford', 'Everton', 'Premier League', []), odds }] };
+  const [m] = parseListings(listing, null, SPORTS.soccer, 'soccer');
+  assert.deepEqual(m.doubleChance, { '1X': 1.4, X2: 1.8, '12': 1.3 });
+  assert.deepEqual(m.drawNoBet, [1.7, 2.4]);
+
+  // Pinnacle fair (no vig, so devig keeps it): H 45%, D 27%, A 28%
+  const ev = pinnacle('soccer_epl', 'Brentford', 'Everton',
+    [{ name: 'Brentford', price: 1 / 0.45 }, { name: 'Everton', price: 1 / 0.28 }, { name: 'Draw', price: 1 / 0.27 }]);
+  attachBetikaOdds([ev], [m], NOW);
+  const opps = scanEvent(ev, makeSettings({ ...S, winningsTax: {} }), NOW);
+  const dnbH = opps.find((o) => o.market === 'draw_no_bet' && o.code === 'H');
+  // EV = 0.45 x 1.70 + 0.27 - 1 = +3.5%
+  assert.ok(Math.abs(dnbH.ev - 0.035) < 1e-9, String(dnbH.ev));
+  assert.deepEqual(betikaPick(dnbH), { market: 'Who Will Win? (If Draw, Money Back)', label: '1' });
+  const dcHD = opps.find((o) => o.market === 'double_chance' && o.code === 'HD');
+  // P = 0.72; 0.72 x 1.40 - 1 = +0.8% -> below 2%: not offered. X/2 at 1.80: 0.55 x 1.8 - 1 = -1% -> no.
+  assert.equal(dcHD, undefined);
+  assert.ok(!opps.some((o) => o.market === 'double_chance'));
+
+  // Same game, Betika lists the teams the other way round: its "1/X" is OUR away-or-draw
+  const swapped = { ...m, home: 'Everton', away: 'Brentford', doubleChance: { '1X': 1.95, X2: 1.20, '12': 1.30 }, drawNoBet: [2.4, 1.7] };
+  const ev2 = pinnacle('soccer_epl', 'Brentford', 'Everton',
+    [{ name: 'Brentford', price: 1 / 0.45 }, { name: 'Everton', price: 1 / 0.28 }, { name: 'Draw', price: 1 / 0.27 }]);
+  attachBetikaOdds([ev2], [swapped], NOW);
+  const o2 = scanEvent(ev2, makeSettings({ ...S, winningsTax: {} }), NOW);
+  const dcDA = o2.find((o) => o.market === 'double_chance' && o.code === 'DA'); // Draw or Everton @ 1.95: 0.55 x 1.95 - 1 = +7.25%
+  assert.ok(dcDA && Math.abs(dcDA.ev - 0.0725) < 1e-9);
+  assert.deepEqual(betikaPick(dcDA), { market: 'Double Chance', label: '1/X' }); // Everton is Betika's "1"
+  const dnbH2 = o2.find((o) => o.market === 'draw_no_bet' && o.code === 'H');
+  assert.deepEqual(betikaPick(dnbH2), { market: 'Who Will Win? (If Draw, Money Back)', label: '2' });
+});
+
+test('Draw No Bet price floor counts the refund', async () => {
+  const { BetikaExecutor } = await import('../src/betika/executor.js');
+  const { Store } = await import('../src/store.js');
+  const sent = [];
+  const ex = new BetikaExecutor(makeSettings({ minEv: 0.02, betikaLive: true, betikaFixedStake: 40 }),
+    { placeBet: async (b) => { sent.push(b); return { status: 'placed', confirmedStake: b.stake }; } }, new Store(':memory:'), { log: quiet });
+  await ex.execute({ book: 'betika', market: 'draw_no_bet', code: 'H', eventId: 'e', outcome: 'H', homeTeam: 'H', awayTeam: 'A', point: null,
+    fairProb: 0.45, pushProb: 0.27, decimal: 1.7, winningsTax: 0, ev: 0.035, stake: 1, betikaRef: { sport: 'soccer', parentMatchId: 'p', swapped: false } });
+  // (1 + 0.02 - 0.27) / 0.45 = 1.6667
+  assert.deepEqual([sent[0].label, sent[0].minEffectiveOdds, sent[0].minOdds], ['1', 1.667, 1.667]);
+});

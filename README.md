@@ -82,12 +82,13 @@ line that settles the same way.
 
 | Sport | Betika market used | Notes |
 |---|---|---|
-| Basketball | Winner (incl. OT), Total (incl. OT) | NBA, NCAAB, EuroLeague |
+| Basketball | Winner (incl. OT), Total (incl. OT) | NBA, NCAAB, EuroLeague. Betika has no basketball handicap market |
 | Soccer | 1X2 (with draw), Total | both are 90 minutes, like Pinnacle. `soccer` = top 8 leagues, `soccer_small` = ~40 lower/mid leagues (League One/Two, 2. Bundesliga, Serie B, Eredivisie, Scotland, Scandinavia, MLS, J-League, ...), `soccer_all` = everything in season. `MARKETS_SOCCER=h2h` halves the cost |
 | Ice hockey | Winner (incl. overtime and penalties) | Betika's hockey 1X2/Total are regulation-only, so not used |
 | Tennis, table tennis, volleyball, boxing | Winner | |
 | Cricket | Winner (incl. super over) | limited overs; Test matches (with draw) never pair |
 | Handball, rugby | 1X2 (with draw) | pairs only with a 3-way Pinnacle line |
+| Soccer, handball, rugby (extra) | Double Chance, Draw No Bet | priced from Pinnacle's 3-way 1X2, no extra credits; Draw No Bet EV counts the refund on a draw |
 | Baseball | (none comparable) | Betika has only a 9-inning 1X2 with draw; Pinnacle's moneyline includes extra innings |
 
 A Betika line is only compared with a Pinnacle line that has exactly the same outcomes, so a

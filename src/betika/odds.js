@@ -45,6 +45,23 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
       if (m.draw) outcomes.push({ name: 'Draw', price: m.draw });
       markets.push({ key: 'h2h', last_update: ts, outcomes });
     }
+    // Double Chance / Draw No Bet. Outcomes carry a code from OUR home/away view
+    // (H = home, D = draw, A = away), translated if Betika lists the teams the other way round.
+    const side = (b) => (b === '1') !== hit.swapped ? 'H' : 'A';
+    const label = { H: ev.home_team, A: ev.away_team, D: 'Draw' };
+    if (m.doubleChance) {
+      const dc = [['1X', [side('1'), 'D']], ['X2', ['D', side('2')]], ['12', ['H', 'A']]].map(([k, codes]) => {
+        const code = ['H', 'D', 'A'].filter((c) => codes.includes(c)).join('');
+        return { name: code.split('').map((c) => label[c]).join(' or '), code, price: m.doubleChance[k] };
+      });
+      markets.push({ key: 'double_chance', last_update: ts, outcomes: dc });
+    }
+    if (m.drawNoBet) {
+      const [b1, b2] = m.drawNoBet;
+      markets.push({ key: 'draw_no_bet', last_update: ts, outcomes: [
+        { name: ev.home_team, code: 'H', price: hit.swapped ? b2 : b1 },
+        { name: ev.away_team, code: 'A', price: hit.swapped ? b1 : b2 }] });
+    }
     if (m.totals?.length) {
       markets.push({ key: 'totals', last_update: ts, outcomes: m.totals.flatMap((l) => [
         { name: 'Over', price: l.over, point: l.point }, { name: 'Under', price: l.under, point: l.point }]) });
@@ -67,6 +84,16 @@ export function betikaPick(opp) {
     if (opp.outcome === 'Draw') return spec.h2h.draw ? { market: spec.h2h.title, label: 'X' } : null;
     const isHome = opp.outcome === opp.homeTeam;
     return { market: spec.h2h.title, label: isHome !== opp.betikaRef.swapped ? '1' : '2' };
+  }
+  // H/D/A codes are from our home/away view; Betika's 1/2 may be swapped.
+  const sym = (c) => (c === 'D' ? 'X' : ((c === 'H') !== opp.betikaRef.swapped ? '1' : '2'));
+  if (opp.market === 'double_chance' && spec.doubleChance && opp.code) {
+    const syms = opp.code.split('').map(sym);
+    const lbl = syms.includes('X') ? (syms.includes('1') ? '1/X' : 'X/2') : '1/2';
+    return { market: spec.doubleChance.title, label: lbl };
+  }
+  if (opp.market === 'draw_no_bet' && spec.drawNoBet && opp.code) {
+    return { market: spec.drawNoBet.title, label: sym(opp.code) };
   }
   if (opp.market === 'totals' && spec.totals) {
     return { market: spec.totals.title, label: `${opp.outcome} ${opp.point}` };

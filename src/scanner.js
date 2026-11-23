@@ -61,6 +61,7 @@ export function scanEvent(event, s, now = new Date()) {
   }
 
   const opps = [];
+  let threeWay = null;
   for (const { market, description, books } of lines.values()) {
     const sharps = [...books.keys()].filter((b) => sharpSet.has(b));
     if (!sharps.length) continue;
@@ -71,6 +72,13 @@ export function scanEvent(event, s, now = new Date()) {
       const entries = [...books.get(b).prices];
       const probs = om.devig(entries.map(([, o]) => o.price), s.devigMethod);
       entries.forEach(([k], i) => fair.set(k, (fair.get(k) ?? 0) + probs[i] / sharps.length));
+    }
+
+    // Remember the sharp 3-way 1X2 (home/draw/away): Double Chance and Draw No Bet derive from it.
+    if (market === 'h2h' && !description) {
+      const pH = fair.get(outcomeKey(event.home_team, null)), pA = fair.get(outcomeKey(event.away_team, null));
+      const pD = fair.get(outcomeKey('Draw', null));
+      if (pH && pA && pD && fair.size === 3) threeWay = { H: pH, D: pD, A: pA, sharps };
     }
 
     for (const [book, { prices, age, title }] of books) {
@@ -104,7 +112,45 @@ export function scanEvent(event, s, now = new Date()) {
       }
     }
   }
+  if (threeWay) opps.push(...scanDerived(event, s, now, start, threeWay, sharpSet, targetSet));
   return opps;
+}
+
+/**
+ * Double Chance and Draw No Bet, priced from the sharp 3-way 1X2 (no extra API cost):
+ *   Double Chance "H or D": P = P(H) + P(D), no push.
+ *   Draw No Bet "H": wins with P(H), stake back with P(D):  EV = P(H) x odds + P(D) - 1.
+ */
+function scanDerived(event, s, now, start, threeWay, sharpSet, targetSet) {
+  const out = [];
+  for (const bm of event.bookmakers ?? []) {
+    if (sharpSet.has(bm.key) || (targetSet.size && !targetSet.has(bm.key))) continue;
+    const tax = s.winningsTax?.[bm.key] ?? 0;
+    for (const mkt of bm.markets ?? []) {
+      if (mkt.key !== 'double_chance' && mkt.key !== 'draw_no_bet') continue;
+      const age = ageSeconds(bm, mkt, now);
+      if (age > s.maxLineAgeSeconds) continue;
+      for (const o of mkt.outcomes ?? []) {
+        if (!o.code || o.price < s.minDecimalOdds || o.price > s.maxDecimalOdds) continue;
+        const pWin = mkt.key === 'double_chance' ? o.code.split('').reduce((t, c) => t + threeWay[c], 0) : threeWay[o.code];
+        const pPush = mkt.key === 'draw_no_bet' ? threeWay.D : 0;
+        const effective = om.afterTax(o.price, tax);
+        const ev = pWin * effective + pPush - 1;
+        if (!(ev >= s.minEv)) continue;
+        out.push({
+          sport: event.sport_key ?? '', eventId: event.id,
+          homeTeam: event.home_team ?? '', awayTeam: event.away_team ?? '', commenceTime: start,
+          market: mkt.key, description: null, outcome: o.name, point: null, code: o.code,
+          book: bm.key, bookTitle: bm.title ?? bm.key,
+          decimal: o.price, effectiveDecimal: effective, winningsTax: tax,
+          fairProb: pWin, pushProb: pPush, ev,
+          stake: om.stakeWithPush(pWin, pPush, effective, s.bankroll, s.kellyFraction, s.maxStakePct),
+          sharpBooks: threeWay.sharps, lineAgeSeconds: age, betikaRef: event.betikaRef ?? null,
+        });
+      }
+    }
+  }
+  return out;
 }
 
 export const scanEvents = (events, s, now = new Date()) =>

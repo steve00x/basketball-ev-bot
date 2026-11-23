@@ -35,6 +35,7 @@ export function parseListings(winnerJson, totalJson, spec = SPORTS.basketball, s
         sport, parentMatchId: String(m.parent_match_id), matchId: String(m.match_id),
         home: m.home_team, away: m.away_team, start: parseEat(m.start_time),
         competition: m.competition_name, category: m.category, winner: null, draw: null, totals: [],
+        doubleChance: null, drawNoBet: null,
       });
     }
     return byId.get(m.parent_match_id);
@@ -49,6 +50,19 @@ export function parseListings(winnerJson, totalJson, spec = SPORTS.basketball, s
     const rec = base(m);
     rec.winner = [home, away];
     rec.draw = spec.h2h.draw ? draw : null;
+    // Double Chance / Draw No Bet arrive in the same listing call (sub_type_id=1,10,11)
+    const extra = (st) => (m.odds ?? []).find((o) => Number(o.sub_type_id) === st);
+    const dc = spec.doubleChance && extra(spec.doubleChance.subType);
+    if (dc) {
+      const p = (d) => num(dc.odds.find((o) => String(o.display).trim().toUpperCase() === d)?.odd_value);
+      const v = { '1X': p('1/X'), 'X2': p('X/2'), '12': p('1/2') };
+      if (v['1X'] && v.X2 && v['12']) rec.doubleChance = v;
+    }
+    const dnb = spec.drawNoBet && extra(spec.drawNoBet.subType);
+    if (dnb) {
+      const p = (d) => num(dnb.odds.find((o) => String(o.display).trim() === d)?.odd_value);
+      if (p('1') && p('2')) rec.drawNoBet = [p('1'), p('2')];
+    }
   }
   if (spec.totals) {
     for (const m of totalJson?.data ?? []) {
@@ -97,7 +111,7 @@ export class BetikaAPI {
     if (!spec) throw new Error(`unknown sport "${sport}"`);
     const opts = { sportId: spec.betikaSportId };
     const [winner, total] = await Promise.all([
-      this.listing(spec.h2h.subType, opts),
+      this.listing([spec.h2h.subType, spec.doubleChance?.subType, spec.drawNoBet?.subType].filter(Boolean).join(','), opts),
       spec.totals ? this.listing(spec.totals.subType, opts) : Promise.resolve(null),
     ]);
     return parseListings(winner, total, spec, sport);

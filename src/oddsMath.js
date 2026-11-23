@@ -78,3 +78,13 @@ export const afterTax = (decimal, winningsTax = 0) => 1 + (1 - winningsTax) * (d
 
 /** Inverse of afterTax: the posted price needed to get `effective` after tax. */
 export const beforeTax = (effective, winningsTax = 0) => 1 + (effective - 1) / (1 - winningsTax);
+
+/** Kelly stake when a bet can also be refunded (Draw No Bet): win pW, push pP, lose the rest. */
+export function stakeWithPush(pW, pP, decimal, bankroll, kellyMult = 0.25, maxPct = 0.02) {
+  const b = decimal - 1, pL = 1 - pW - pP;
+  const f = Math.max((pW * b - pL) / (b * (pW + pL)), 0);
+  return Math.round(bankroll * Math.min(f * kellyMult, maxPct) * 100) / 100;
+}
+
+/** Fair decimal odds of a bet that wins with pW and is refunded with pP. */
+export const fairOddsWithPush = (pW, pP = 0) => (1 - pP) / pW;

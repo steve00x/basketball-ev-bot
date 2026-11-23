@@ -1,7 +1,7 @@
 // Alert channels: console (always), Discord webhook, Telegram bot.
 import { matchup, selection } from './scanner.js';
 
-const MARKET_NAMES = { h2h: 'Moneyline', spreads: 'Spread', totals: 'Total' };
+const MARKET_NAMES = { h2h: 'Moneyline', spreads: 'Spread', totals: 'Total', double_chance: 'Double Chance', draw_no_bet: 'Draw No Bet' };
 const titleCase = (s) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function formatOpportunity(o) {
@@ -12,7 +12,7 @@ export function formatOpportunity(o) {
     `${o.ev >= 0 ? '+' : '\u2212'}${Math.abs(o.ev * 100).toFixed(2)}% EV | ${league} | ${matchup(o)} (${tip})`,
     `  ${market}: ${selection(o)} @ ${o.bookTitle} ${o.decimal.toFixed(2)}`
       + (o.winningsTax ? ` (${o.effectiveDecimal.toFixed(3)} after ${Math.round(o.winningsTax * 100)}% tax)` : ''),
-    `  Fair ${(1 / o.fairProb).toFixed(2)} (win ${(o.fairProb * 100).toFixed(1)}%) via ${o.sharpBooks.join(', ')}`
+    `  Fair ${((1 - (o.pushProb ?? 0)) / o.fairProb).toFixed(2)} (win ${(o.fairProb * 100).toFixed(1)}%${o.pushProb ? `, refund ${(o.pushProb * 100).toFixed(1)}%` : ''}) via ${o.sharpBooks.join(', ')}`
       + ` | Stake ${o.stake.toFixed(2)}`,
   ].join('\n');
 }

@@ -72,6 +72,15 @@ test('3-way markets: the Draw button (X) on a 1x2 market', async () => {
   assert.match(slip, /1X2/);
 });
 
+test('Double Chance X/2 and Draw No Bet 2 buttons (labels as on the real site)', async () => {
+  go('');
+  const dc = await client.placeBet({ ...PICK, market: 'Double Chance', label: 'X/2', minOdds: 2, stake: 20 });
+  assert.deepEqual([dc.status, dc.odds], ['dry_run', 2.65]);
+  assert.match(await client.page.$eval('#slips .stacked .stacked__market', (n) => n.textContent), /DOUBLE CHANCE/);
+  const dnb = await client.placeBet({ ...PICK, market: 'Who Will Win? (If Draw, Money Back)', label: '2', minOdds: 4, stake: 20 });
+  assert.deepEqual([dnb.status, dnb.odds], ['dry_run', 4.8]);
+});
+
 test('refusals: price moved, payout after tax too low, missing outcome, not logged in', async () => {
   go('');
   assert.equal((await client.placeBet({ ...PICK, minOdds: 1.7, stake: 100 })).status, 'price_moved');

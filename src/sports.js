@@ -22,6 +22,9 @@ export const SPORTS = {
     oddsMarkets: ['h2h', 'totals'],
     h2h: { subType: 1, title: '1x2', draw: true },
     totals: { subType: 18, title: 'Total' },
+    // Derived from Pinnacle's 1X2 (no extra credits): fair odds come straight from its 3-way prices.
+    doubleChance: { subType: 10, title: 'Double Chance' },
+    drawNoBet: { subType: 11, title: 'Who Will Win? (If Draw, Money Back)' },
   },
   icehockey: {
     // Betika's hockey 1X2 and Total are regulation-only; the NHL moneyline includes OT and
@@ -61,6 +64,9 @@ export const SPORTS = {
     title: 'Handball', betikaSportId: 33, oddsApiPrefixes: ['handball_'],
     oddsMarkets: ['h2h'],
     h2h: { subType: 1, title: '1x2', draw: true },
+    // Derived from Pinnacle's 1X2 (no extra credits): fair odds come straight from its 3-way prices.
+    doubleChance: { subType: 10, title: 'Double Chance' },
+    drawNoBet: { subType: 11, title: 'Who Will Win? (If Draw, Money Back)' },
   },
   rugby: {
     // Betika only offers a regulation-time 1X2. Pairs only with 3-way Pinnacle lines.
@@ -68,6 +74,9 @@ export const SPORTS = {
     title: 'Rugby', betikaSportId: 41, oddsApiPrefixes: ['rugbyunion_'],
     oddsMarkets: ['h2h'],
     h2h: { subType: 1, title: '1x2', draw: true },
+    // Derived from Pinnacle's 1X2 (no extra credits): fair odds come straight from its 3-way prices.
+    doubleChance: { subType: 10, title: 'Double Chance' },
+    drawNoBet: { subType: 11, title: 'Who Will Win? (If Draw, Money Back)' },
   },
   baseball: {
     // Betika baseball only has a 9-inning 1X2 (with draw); Pinnacle's moneyline includes

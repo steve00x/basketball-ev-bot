@@ -180,8 +180,8 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
     const [best] = scanEvents(events, { ...scanSettings, minEv: -1 });
     if (best) {
       log.info(`closest: ${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal} = `
-        + `${(best.ev * 100).toFixed(1)}% EV after tax (${((best.fairProb * best.decimal - 1) * 100).toFixed(1)}% before tax) `
-        + `vs fair ${(1 / best.fairProb).toFixed(2)} (need +${(s.minEv * 100).toFixed(1)}%)`);
+        + `${(best.ev * 100).toFixed(1)}% EV after tax (${((best.fairProb * best.decimal + (best.pushProb ?? 0) - 1) * 100).toFixed(1)}% before tax) `
+        + `vs fair ${((1 - (best.pushProb ?? 0)) / best.fairProb).toFixed(2)} (need +${(s.minEv * 100).toFixed(1)}%)`);
     }
   }
   await notifier.sendOpportunities(fresh);

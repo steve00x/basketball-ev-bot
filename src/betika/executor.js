@@ -1,5 +1,5 @@
 // Decides whether an opportunity may be bet on, places it on Betika and records the result.
-import { beforeTax, minAcceptableOdds } from '../oddsMath.js';
+import { beforeTax } from '../oddsMath.js';
 import { dedupeKey, matchup, selection } from '../scanner.js';
 import { betikaPick } from './odds.js';
 
@@ -41,7 +41,8 @@ export class BetikaExecutor {
       return { status: 'skipped', reason: skip };
     }
     // Lowest after-tax price that still clears MIN_EV, and the posted price that gives it.
-    const minEffective = minAcceptableOdds(opp.fairProb, this.s.minEv);
+    // Lowest real price giving MIN_EV: pWin x odds + pPush - 1 >= MIN_EV (pPush = refund chance, Draw No Bet).
+    const minEffective = (1 + this.s.minEv - (opp.pushProb ?? 0)) / opp.fairProb;
     const minOdds = Math.max(beforeTax(minEffective, opp.winningsTax ?? 0), this.s.minDecimalOdds);
     const round3 = (x) => Math.ceil(x * 1000) / 1000;
     if (!Number.isFinite(minOdds) || !Number.isFinite(minEffective) || !Number.isFinite(opp.fairProb)) {
