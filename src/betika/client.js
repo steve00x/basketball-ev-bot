@@ -58,8 +58,12 @@ export class BetikaClient {
     this.page.setDefaultTimeout(20000);
     // A native dialog freezes the page (and every evaluate) until it's answered.
     // Betika's "Remove All" asks "Are you sure you want to clear the betslip?": accept only that one.
+    // "beforeunload" is the browser's "Leave site?" prompt (Betika shows it while the slip has
+    // a selection). It only asks to continue navigating, so accept it - dismissing cancels the
+    // navigation and page.goto fails with net::ERR_ABORTED.
     this.page.on('dialog', async (d) => {
-      const ok = d.type() === 'confirm' && new RegExp(this.sel.clearSlipConfirm ?? 'clear the betslip', 'i').test(d.message());
+      const ok = d.type() === 'beforeunload'
+        || (d.type() === 'confirm' && new RegExp(this.sel.clearSlipConfirm ?? 'clear the betslip', 'i').test(d.message()));
       this.log[ok ? 'info' : 'warn']?.(`betika: ${ok ? 'accepted' : 'dismissed'} ${d.type()} "${d.message()}"`);
       await (ok ? d.accept() : d.dismiss()).catch(() => {});
     });
@@ -80,7 +84,12 @@ export class BetikaClient {
     let lastErr;
     for (let i = 1; i <= attempts; i++) {
       try {
-        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+        await this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs }).catch((e) => {
+          // Betika's app sometimes swaps the URL itself mid-load, which Chrome reports as an
+          // aborted navigation. The page is still fine, so keep waiting for it to render.
+          if (!/ERR_ABORTED|frame was detached/i.test(e.message)) throw e;
+          this.log.warn?.(`betika: navigation to ${url} was interrupted, waiting for the page anyway`);
+        });
         await this.page.waitForSelector(readySelector, { timeout: timeoutMs });
         await sleep(1500); // let the header settle into logged-in / logged-out state
         return;

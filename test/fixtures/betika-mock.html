@@ -58,6 +58,8 @@
     if (!confirm('Are you sure you want to clear the betslip?')) return;
     content.innerHTML = ''; pick = null; render();
   });
+  // like the real site: "Leave site?" while the slip has a selection
+  window.addEventListener('beforeunload', (e) => { if (content.children.length) { e.preventDefault(); e.returnValue = ''; } });
   if (q.get('alert')) setTimeout(() => alert('Some other popup'), 50);
   input.addEventListener('input', render);
   if (q.get('preselected')) content.innerHTML = '<div class="rounded-card"><div class="stacked">old</div></div>';

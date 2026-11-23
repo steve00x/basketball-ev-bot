@@ -88,6 +88,18 @@ test('accepts only the clear-betslip confirm; other dialogs are dismissed', asyn
   assert.equal(await client.slipCount(), 1);
 });
 
+test('accepts the "Leave site?" prompt so navigation is not aborted', async () => {
+  go('');
+  const logs = [];
+  client.log = { info: (m) => logs.push(m), warn: (m) => logs.push(m) };
+  await client.goto(`${base}/m/1?x=1`, '.market');
+  await client.page.click('.market__odds button.odd'); // real click: gives the page user activation
+  await client.goto(`${base}/login`, '.market'); // would fail with ERR_ABORTED if the prompt were dismissed
+  client.log = { info() {} };
+  assert.ok(logs.some((m) => /accepted beforeunload/.test(m)), logs.join('\n'));
+  assert.equal(client.page.url(), `${base}/login`);
+});
+
 test('live: rejection and silence are reported, never assumed placed', async () => {
   go('loggedin=1&mode=reject');
   const rej = await client.placeBet({ ...PICK, minOdds: 1.6, stake: 200, live: true });
