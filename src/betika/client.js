@@ -71,7 +71,9 @@ export class BetikaClient {
   }
 
   async close() {
-    await this.browser?.close();
+    // If you already closed the window, closing again makes Windows print
+    // "process could not be terminated" errors, so skip it.
+    if (this.browser?.connected) await this.browser.close().catch(() => {});
     this.browser = this.page = null;
   }
 

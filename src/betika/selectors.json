@@ -30,6 +30,6 @@
     "finalPayout": ".betslip__details__row.finalpay .betslip__details__row__value"
   },
   "clearSlipConfirm": "clear the betslip",
-  "betApi": "api\\.betika\\.com/.*bet",
+  "betApi": "api\\.betika\\.com/v2/bet(\\?|$)",
   "unverified_balance": ".account__balance, .topnav__balance, .balance"
 }
