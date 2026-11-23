@@ -9,7 +9,7 @@ export function formatOpportunity(o) {
   const tip = o.commenceTime.toUTCString().replace(/:\d\d GMT$/, ' UTC');
   const league = o.sport.replace('basketball_', '').toUpperCase();
   return [
-    `+${(o.ev * 100).toFixed(2)}% EV | ${league} | ${matchup(o)} (${tip})`,
+    `${o.ev >= 0 ? '+' : '\u2212'}${Math.abs(o.ev * 100).toFixed(2)}% EV | ${league} | ${matchup(o)} (${tip})`,
     `  ${market}: ${selection(o)} @ ${o.bookTitle} ${o.decimal.toFixed(2)}`
       + (o.winningsTax ? ` (${o.effectiveDecimal.toFixed(3)} after ${Math.round(o.winningsTax * 100)}% tax)` : ''),
     `  Fair ${(1 / o.fairProb).toFixed(2)} (win ${(o.fairProb * 100).toFixed(1)}%) via ${o.sharpBooks.join(', ')}`

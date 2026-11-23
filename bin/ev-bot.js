@@ -6,7 +6,7 @@ import { BetikaClient } from '../src/betika/client.js';
 import { BetikaExecutor } from '../src/betika/executor.js';
 import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, fetchEvents, loadDemoEvents, marketsFor, resolveKeys, runCycle } from '../src/bot.js';
 import { SPORTS, sportGroup } from '../src/sports.js';
-import { settingsFromEnv } from '../src/config.js';
+import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
@@ -47,8 +47,15 @@ const { values: opt, positionals } = parseArgs({
 if (opt.help) { console.log(HELP); process.exit(0); }
 
 const cmd = positionals[0] ?? 'scan';
-const s = settingsFromEnv(opt.env);
-if (opt['min-ev'] !== undefined) s.minEv = Number(opt['min-ev']);
+let s;
+try {
+  s = settingsFromEnv(opt.env);
+  if (opt['min-ev'] !== undefined) s = validateSettings({ ...s, minEv: parseNumber(opt['min-ev'], '--min-ev') });
+} catch (e) {
+  if (!(e instanceof SettingsError)) throw e;
+  console.error(`Settings problem: ${e.message}`);
+  process.exit(1);
+}
 if (opt.live) s.betikaLive = true;
 
 const makeClient = (overrides = {}) => new BetikaClient({

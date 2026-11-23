@@ -8,14 +8,28 @@ export function loadDotenv(path = '.env') {
     if (!line || line.startsWith('#') || !line.includes('=')) continue;
     const i = line.indexOf('=');
     const key = line.slice(0, i).trim();
-    const value = line.slice(i + 1).split(' #')[0].trim().replace(/^['"]|['"]$/g, '');
+    const value = line.slice(i + 1).split(/\s+#/)[0].trim().replace(/^['"]|['"]$/g, ''); // "0.02<tab># note" too
     if (process.env[key] === undefined) process.env[key] = value;
   }
 }
 
 const env = (k) => (process.env[k] ?? '').trim();
 const list = (k, d) => { const v = env(k).split(',').map((s) => s.trim()).filter(Boolean); return v.length ? v : d; };
-const num = (k, d) => (env(k) === '' ? d : Number(env(k)));
+export class SettingsError extends Error {}
+
+/** Read a number from .env. Accepts "0.02", "2%", "0,02". Anything else stops the bot with a clear message. */
+export function parseNumber(raw, name = 'value') {
+  let t = String(raw).trim().replace(/\s+/g, '');
+  const pct = t.endsWith('%');
+  if (pct) t = t.slice(0, -1);
+  if (/^-?\d+,\d+$/.test(t)) t = t.replace(',', '.'); // "0,02" (comma decimal)
+  const n = Number(t);
+  if (t === '' || !Number.isFinite(n)) {
+    throw new SettingsError(`${name}=${raw} in .env is not a number (write it like ${name}=0.02)`);
+  }
+  return pct ? n / 100 : n;
+}
+const num = (k, d) => (env(k) === '' ? d : parseNumber(env(k), k));
 const bool = (k, d) => (env(k) === '' ? d : /^(1|true|yes|on)$/i.test(env(k)));
 const str = (k, d) => env(k) || d;
 
@@ -65,7 +79,7 @@ export const DEFAULTS = Object.freeze({
 export function settingsFromEnv(dotenv = '.env', overrides = {}) {
   loadDotenv(dotenv);
   const d = DEFAULTS;
-  return {
+  return validateSettings({
     ...d,
     apiKey: str('ODDS_API_KEY', d.apiKey),
     sports: list('SPORTS', d.sports),
@@ -110,7 +124,22 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     chromePath: str('CHROME_PATH', ''),
     betikaBrowserProxy: str('BETIKA_BROWSER_PROXY', ''),
     ...overrides,
-  };
+  });
+}
+
+/** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
+export function validateSettings(s) {
+  const fail = (m) => { throw new SettingsError(m); };
+  const finite = ['minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+    'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
+    'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
+  for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);
+  if (s.minEv < 0) fail(`MIN_EV=${s.minEv} is negative: that would bet on losing prices`);
+  if (s.minEv > 0.5) fail(`MIN_EV=${s.minEv} looks wrong (it is a fraction: 0.02 means 2%)`);
+  const tax = s.winningsTax?.betika ?? 0;
+  if (!Number.isFinite(tax) || tax < 0 || tax >= 1) fail(`BETIKA_WINNINGS_TAX=${tax} must be between 0 and 0.99`);
+  if (s.minDecimalOdds <= 1 || s.maxDecimalOdds <= s.minDecimalOdds) fail('MIN_DECIMAL_ODDS / MAX_DECIMAL_ODDS are invalid');
+  return s;
 }
 
 export const makeSettings = (overrides = {}) => ({ ...DEFAULTS, ...overrides });

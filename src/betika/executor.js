@@ -44,6 +44,10 @@ export class BetikaExecutor {
     const minEffective = minAcceptableOdds(opp.fairProb, this.s.minEv);
     const minOdds = Math.max(beforeTax(minEffective, opp.winningsTax ?? 0), this.s.minDecimalOdds);
     const round3 = (x) => Math.ceil(x * 1000) / 1000;
+    if (!Number.isFinite(minOdds) || !Number.isFinite(minEffective) || !Number.isFinite(opp.fairProb)) {
+      this.log.error?.(`betika: refusing ${selection(opp)} - price floor is not a number (check MIN_EV / tax settings)`);
+      return { status: 'skipped', reason: 'bad_settings' };
+    }
     const bet = {
       parentMatchId: opp.betikaRef.parentMatchId, ...betikaPick(opp),
       minOdds: round3(minOdds), minEffectiveOdds: round3(minEffective),
