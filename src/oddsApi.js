@@ -52,6 +52,11 @@ export class OddsAPI {
     return this.get('/sports');
   }
 
+  /** Upcoming events of one league, without odds. Costs no credits. */
+  getEvents(sport) {
+    return this.get(`/sports/${sport}/events`, { dateFormat: 'iso' });
+  }
+
   getOdds(sport, markets, regions, bookmakers) {
     return this.get(`/sports/${sport}/odds`, {
       markets: markets.join(','), oddsFormat: 'decimal', dateFormat: 'iso',

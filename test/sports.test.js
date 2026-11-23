@@ -152,3 +152,29 @@ test('soccer_small: lower leagues, only those in season; MARKETS_SOCCER halves t
     assert.deepEqual(settingsFromEnv(null).marketsBySport.soccer, ['h2h']);
   } finally { delete process.env.MARKETS_SOCCER; }
 });
+
+test('name fixes from a real scan (Odds API name vs Betika name)', () => {
+  const pairs = [['New York Islanders', 'NY Islanders'], ['North Florida Ospreys', 'N. Florida'], ['Central Arkansas Bears', 'Cent. Arkansas'],
+    ['Northern Kentucky Norse', 'Nku Norse'], ['Loyola (Chi) Ramblers', 'Loyola Chicago'], ['UNC Greensboro Spartans', 'NC Greensboro'],
+    ['FC Bayern München', 'B. Munich'], ['Bodø/Glimt', 'Bodoe/Glimt'], ['Everton U21', 'Everton Reserves'],
+    ['Tottenham Hotspur U21', 'TOTTENHAM RESERVE'], ['Sport', 'Vaasan'], ['Arsenal Women', 'Arsenal (W)']];
+  for (const [a, b] of pairs) assert.ok(teamSimilarity(a, b) >= 0.75, `${a} vs ${b}: ${teamSimilarity(a, b)}`);
+  for (const [a, b] of [['Everton U21', 'Everton'], ['Arsenal', 'Arsenal (W)'], ['South Carolina St Bulldogs', 'Hawks']]) {
+    assert.ok(teamSimilarity(a, b) < 0.75, `${a} vs ${b}`);
+  }
+});
+
+test('free events check skips leagues with no games (no credits spent on them)', async () => {
+  const soon = new Date(Date.now() + 3 * 3600_000).toISOString();
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url.pathname);
+    if (url.pathname.endsWith('/v4/sports')) return new Response(JSON.stringify([{ key: 'soccer_epl' }, { key: 'soccer_spl' }]), { status: 200 });
+    if (url.pathname.endsWith('/soccer_epl/events')) return new Response(JSON.stringify([{ id: 'x', commence_time: soon }]), { status: 200 });
+    if (url.pathname.endsWith('/soccer_spl/events')) return new Response('[]', { status: 200 });
+    return new Response(JSON.stringify([{ id: 'x', sport_key: 'soccer_epl', commence_time: soon, home_team: 'A', away_team: 'B', bookmakers: [] }]), { status: 200 });
+  };
+  const s = makeSettings({ sports: ['soccer_epl', 'soccer_spl'], markets: ['h2h'], betikaEnabled: true });
+  await fetchEvents(new OddsAPI('k', { fetchImpl }), s, quiet);
+  assert.deepEqual(calls.filter((p) => p.endsWith('/odds')), ['/v4/sports/soccer_epl/odds']); // spl had no games: not paid for
+});

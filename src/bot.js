@@ -108,9 +108,22 @@ export async function fetchEvents(api, s, log = console) {
   const keys = await resolveKeys(api, s, log);
   const cost = keys.reduce((n, k) => n + marketsFor(k, s).length, 0);
   log.info(`scanning ${keys.length} leagues: ${keys.join(', ')} (~${cost} credits per scan)`);
+  let skipped = 0;
   for (const sport of keys) {
     const markets = marketsFor(sport, s);
     if (!markets.length) continue;
+    // Odds calls cost credits even when a league has no games; the events list is free.
+    if (api.getEvents) {
+      try {
+        const upcoming = await api.getEvents(sport);
+        if (!upcoming.some((ev) => { const t = new Date(ev.commence_time); return t > now && t <= horizon; })) {
+          skipped++;
+          continue;
+        }
+      } catch (e) {
+        log.warn(`${sport}: event list failed (${e.message}), fetching odds anyway`);
+      }
+    }
     let events;
     try {
       events = await api.getOdds(sport, markets, s.regions, apiBooks);
@@ -141,6 +154,7 @@ export async function fetchEvents(api, s, log = console) {
     }
     all.push(...events);
   }
+  if (skipped) log.info(`skipped ${skipped} leagues with no games in the next ${s.maxHoursToStart}h (saved credits)`);
   return all;
 }
 

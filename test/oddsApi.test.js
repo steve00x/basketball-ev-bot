@@ -23,9 +23,10 @@ test('fetchEvents asks only for sharp books when betting Betika, and merges prop
   const s = makeSettings({ betikaEnabled: true, propMarkets: ['player_points'] });
   const [ev] = await fetchEvents(api, s, quiet);
   assert.deepEqual(ev.bookmakers[0].markets.map((m) => m.key), ['h2h', 'player_points']);
-  assert.equal(calls[0].searchParams.get('bookmakers'), 'pinnacle');
-  assert.equal(calls[0].searchParams.get('regions'), null);
-  assert.equal(calls[0].searchParams.get('oddsFormat'), 'decimal');
+  const oddsCall = calls.find((u) => u.pathname.endsWith('/basketball_nba/odds'));
+  assert.equal(oddsCall.searchParams.get('bookmakers'), 'pinnacle');
+  assert.equal(oddsCall.searchParams.get('regions'), null);
+  assert.equal(oddsCall.searchParams.get('oddsFormat'), 'decimal');
   assert.equal(api.requestsRemaining, '480');
 });
 
