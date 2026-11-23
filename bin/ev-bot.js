@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { BetikaAPI } from '../src/betika/api.js';
 import { BetikaClient } from '../src/betika/client.js';
 import { BetikaExecutor } from '../src/betika/executor.js';
-import { DemoBetikaFeed, DemoBetikaPlacer, fetchEvents, loadDemoEvents, marketsFor, resolveKeys, runCycle } from '../src/bot.js';
+import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, fetchEvents, loadDemoEvents, marketsFor, resolveKeys, runCycle } from '../src/bot.js';
 import { SPORTS, sportGroup } from '../src/sports.js';
 import { settingsFromEnv } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
@@ -130,6 +130,8 @@ const commands = {
       const n = groups.includes(g) ? (await betika.matches(g).catch(() => [])).length : '-';
       console.log(`${SPORTS[g].title.padEnd(13)} Odds API leagues: ${mine.length ? mine.join(', ') : 'none in season / not covered'}`);
       console.log(`${''.padEnd(13)} Betika matches: ${n}   credits per scan: ${mine.reduce((t, k) => t + marketsFor(k, s).length, 0)}`);
+      const more = activeKeysFor(g).filter((k) => !mine.includes(k) && !SPORTS[g].skipKeys?.test(k));
+      if (more.length) console.log(`${''.padEnd(13)} also in season (add to SPORTS to scan): ${more.join(', ')}`);
     }
     const cost = keys.reduce((t, k) => t + marketsFor(k, s).length, 0);
     const perDay = Math.round(cost * 86400 / s.pollSeconds);

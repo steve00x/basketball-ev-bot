@@ -78,11 +78,37 @@ export const SPORTS = {
   },
 };
 
-/** Default soccer leagues when SPORTS says just "soccer" (each league costs credits). */
+/** Top soccer leagues when SPORTS says "soccer" (each league costs credits). */
 export const DEFAULT_SOCCER_LEAGUES = [
   'soccer_epl', 'soccer_efl_champ', 'soccer_spain_la_liga', 'soccer_italy_serie_a',
   'soccer_germany_bundesliga', 'soccer_france_ligue_one', 'soccer_uefa_champs_league',
   'soccer_uefa_europa_league',
+];
+
+/**
+ * Lower and mid-tier leagues for SPORTS=soccer_small. Betika is more likely to lag behind
+ * Pinnacle here than in the top leagues. Keys that are out of season (or that The Odds API
+ * names differently) are simply not used: only keys it lists as active are scanned.
+ */
+export const SMALL_SOCCER_LEAGUES = [
+  // England / Scotland / Ireland
+  'soccer_england_league1', 'soccer_england_league2', 'soccer_england_efl_cup', 'soccer_fa_cup',
+  'soccer_spl', 'soccer_league_of_ireland',
+  // Second tiers of the big five
+  'soccer_germany_bundesliga2', 'soccer_germany_liga3', 'soccer_italy_serie_b',
+  'soccer_spain_segunda_division', 'soccer_france_ligue_two',
+  // Rest of Europe
+  'soccer_netherlands_eredivisie', 'soccer_portugal_primeira_liga', 'soccer_belgium_first_div',
+  'soccer_austria_bundesliga', 'soccer_switzerland_superleague', 'soccer_turkey_super_league',
+  'soccer_greece_super_league', 'soccer_denmark_superliga', 'soccer_norway_eliteserien',
+  'soccer_sweden_allsvenskan', 'soccer_sweden_superettan', 'soccer_finland_veikkausliiga',
+  'soccer_poland_ekstraklasa', 'soccer_uefa_europa_conference_league',
+  // Americas / Asia / Oceania
+  'soccer_brazil_campeonato', 'soccer_brazil_serie_b', 'soccer_argentina_primera_division',
+  'soccer_chile_campeonato', 'soccer_mexico_ligamx', 'soccer_usa_mls',
+  'soccer_conmebol_copa_libertadores', 'soccer_conmebol_copa_sudamericana',
+  'soccer_japan_j_league', 'soccer_korea_kleague1', 'soccer_china_superleague',
+  'soccer_australia_aleague', 'soccer_saudi_arabia_pro_league',
 ];
 
 /** "soccer_epl" -> "soccer", "tennis_atp_paris" -> "tennis", unknown -> null */
@@ -94,7 +120,7 @@ export function sportGroup(oddsApiKey) {
 }
 
 /**
- * Turn SPORTS entries (groups like "soccer", "tennis", "soccer_all", or exact keys like
+ * Turn SPORTS entries (groups like "soccer", "soccer_small", "tennis", "soccer_all", or exact keys like
  * "soccer_epl") into the active Odds API sport keys. `active` is The Odds API /v4/sports
  * list (free to call). Returns { keys, missing: [groups with nothing active] }.
  */
@@ -104,8 +130,8 @@ export function resolveSportKeys(entries, active) {
   const missing = [];
   for (const raw of entries) {
     const e = raw.trim().toLowerCase();
-    if (e === 'soccer') {
-      const ks = DEFAULT_SOCCER_LEAGUES.filter((k) => activeKeys.includes(k));
+    if (e === 'soccer' || e === 'soccer_small') {
+      const ks = (e === 'soccer' ? DEFAULT_SOCCER_LEAGUES : SMALL_SOCCER_LEAGUES).filter((k) => activeKeys.includes(k));
       ks.forEach((k) => keys.add(k));
       if (!ks.length) missing.push(e);
     } else if (e === 'soccer_all' || SPORTS[e]) {

@@ -134,3 +134,21 @@ test('fetchEvents expands groups via /sports and buys only comparable markets', 
   const odds = calls.filter((u) => u.pathname.endsWith('/odds')).map((u) => [u.pathname.split('/')[3], u.searchParams.get('markets')]);
   assert.deepEqual(odds, [['icehockey_nhl', 'h2h'], ['soccer_epl', 'h2h,totals']]);
 });
+
+test('soccer_small: lower leagues, only those in season; MARKETS_SOCCER halves the cost', async () => {
+  const active = [{ key: 'soccer_epl' }, { key: 'soccer_england_league1' }, { key: 'soccer_germany_bundesliga2' },
+    { key: 'soccer_usa_mls', active: false }, { key: 'soccer_some_new_league' }];
+  const r = resolveSportKeys(['soccer_small'], active);
+  assert.deepEqual(r.keys, ['soccer_england_league1', 'soccer_germany_bundesliga2']); // MLS out of season, EPL not "small"
+  assert.deepEqual(resolveSportKeys(['soccer', 'soccer_small'], active).keys, ['soccer_epl', 'soccer_england_league1', 'soccer_germany_bundesliga2']);
+
+  const s = makeSettings({ markets: ['h2h', 'totals'], marketsBySport: { soccer: ['h2h'] } });
+  assert.deepEqual(marketsFor('soccer_england_league1', s), ['h2h']);
+  assert.deepEqual(marketsFor('basketball_nba', s), ['h2h', 'totals']); // other sports unchanged
+
+  const { settingsFromEnv } = await import('../src/config.js');
+  process.env.MARKETS_SOCCER = 'h2h';
+  try {
+    assert.deepEqual(settingsFromEnv(null).marketsBySport.soccer, ['h2h']);
+  } finally { delete process.env.MARKETS_SOCCER; }
+});

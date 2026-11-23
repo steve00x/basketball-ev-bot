@@ -72,7 +72,7 @@ export function bookPlan(s) {
  */
 const sportsCache = { at: 0, list: null };
 export async function resolveKeys(api, s, log = console) {
-  const needsList = s.sports.some((e) => SPORTS[e.toLowerCase()] || ['soccer', 'soccer_all'].includes(e.toLowerCase()));
+  const needsList = s.sports.some((e) => SPORTS[e.toLowerCase()] || ['soccer', 'soccer_small', 'soccer_all'].includes(e.toLowerCase()));
   if (!needsList) return s.sports;
   if (!sportsCache.list || Date.now() - sportsCache.at > 6 * 3600_000) {
     try {
@@ -88,11 +88,17 @@ export async function resolveKeys(api, s, log = console) {
   return keys;
 }
 
-/** Markets worth paying for on a key: the ones Betika has a comparable market for. */
+/** Markets worth paying for on a key: those Betika can compare, limited by MARKETS / MARKETS_<SPORT>. */
 export const marketsFor = (key, s) => {
-  const spec = SPORTS[sportGroup(key) ?? ''];
-  return spec ? s.markets.filter((m) => spec.oddsMarkets.includes(m)) : s.markets;
+  const group = sportGroup(key) ?? '';
+  const spec = SPORTS[group];
+  const wanted = s.marketsBySport?.[group] ?? s.markets;
+  return spec ? wanted.filter((m) => spec.oddsMarkets.includes(m)) : wanted;
 };
+
+/** Every in-season Odds API key of a sport group, from the cached /v4/sports list. */
+export const activeKeysFor = (group) => (sportsCache.list ?? [])
+  .filter((x) => x.active !== false && !x.has_outrights && sportGroup(x.key) === group).map((x) => x.key);
 
 export async function fetchEvents(api, s, log = console) {
   const { apiBooks } = bookPlan(s);

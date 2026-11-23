@@ -88,6 +88,10 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     telegramBotToken: str('TELEGRAM_BOT_TOKEN', ''),
     telegramChatId: str('TELEGRAM_CHAT_ID', ''),
     winningsTax: { ...d.winningsTax, betika: num('BETIKA_WINNINGS_TAX', d.winningsTax.betika) },
+    // MARKETS_SOCCER=h2h (etc.) overrides MARKETS for one sport, e.g. to halve soccer's credit cost.
+    marketsBySport: Object.fromEntries(Object.keys(process.env)
+      .filter((k) => /^MARKETS_[A-Z]+$/.test(k) && env(k))
+      .map((k) => [k.slice(8).toLowerCase(), list(k, [])])),
     betikaEnabled: bool('BETIKA_ENABLED', d.betikaEnabled),
     betikaLive: bool('BETIKA_LIVE', d.betikaLive),
     betikaPhone: str('BETIKA_PHONE', ''),
