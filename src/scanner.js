@@ -1,5 +1,6 @@
 // Find +EV bets by comparing soft-book prices to de-vigged sharp prices.
 import * as om from './oddsMath.js';
+import { sportGroup } from './sports.js';
 
 const outcomeKey = (name, point) => JSON.stringify([name, point]);
 
@@ -62,6 +63,7 @@ export function scanEvent(event, s, now = new Date()) {
 
   const opps = [];
   let threeWay = null;
+  let mainTotal = null;
   for (const { market, description, books } of lines.values()) {
     const sharps = [...books.keys()].filter((b) => sharpSet.has(b));
     if (!sharps.length) continue;
@@ -72,6 +74,16 @@ export function scanEvent(event, s, now = new Date()) {
       const entries = [...books.get(b).prices];
       const probs = om.devig(entries.map(([, o]) => o.price), s.devigMethod);
       entries.forEach(([k], i) => fair.set(k, (fair.get(k) ?? 0) + probs[i] / sharps.length));
+    }
+
+    // Remember the sharp main total (fair P(Over) at its line) for the alternate-totals model.
+    if (market === 'totals' && !description) {
+      const [[k1, o1], [k2, o2]] = [...books.get(sharps[0]).prices];
+      const over = o1.name === 'Over' ? [k1, o1] : [k2, o2];
+      const pOver = fair.get(over[0]);
+      if (pOver && (!mainTotal || Math.abs(pOver - 0.5) < Math.abs(mainTotal.pOver - 0.5))) {
+        mainTotal = { line: over[1].point, pOver, sharps };
+      }
     }
 
     // Remember the sharp 3-way 1X2 (home/draw/away): Double Chance and Draw No Bet derive from it.
@@ -113,6 +125,9 @@ export function scanEvent(event, s, now = new Date()) {
     }
   }
   if (threeWay) opps.push(...scanDerived(event, s, now, start, threeWay, sharpSet, targetSet));
+  if (mainTotal && s.altTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
+    opps.push(...scanAltTotals(event, s, now, start, mainTotal, sharpSet, targetSet));
+  }
   return opps;
 }
 
@@ -146,6 +161,72 @@ function scanDerived(event, s, now, start, threeWay, sharpSet, targetSet) {
           fairProb: pWin, pushProb: pPush, ev,
           stake: om.stakeWithPush(pWin, pPush, effective, s.bankroll, s.kellyFraction, s.maxStakePct),
           sharpBooks: threeWay.sharps, lineAgeSeconds: age, betikaRef: event.betikaRef ?? null,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Fit a soft book's ladder of total lines to a normal curve: probit of its de-vigged P(Over)
+ * against the line is a straight line with slope -1/sigma. Returns { sigma, mu, r2 } or null.
+ */
+export function fitTotalLadder(lines) {
+  const pts = lines.filter((l) => l.over > 1 && l.under > 1).map((l) => {
+    const io = 1 / l.over, iu = 1 / l.under;
+    return { L: l.point, z: om.normInv(iu / (io + iu)) }; // z = probit(P(Under)) = (L - mu) / sigma
+  });
+  if (pts.length < 3) return null;
+  const n = pts.length, mx = pts.reduce((a, p) => a + p.L, 0) / n, mz = pts.reduce((a, p) => a + p.z, 0) / n;
+  const sxx = pts.reduce((a, p) => a + (p.L - mx) ** 2, 0), szz = pts.reduce((a, p) => a + (p.z - mz) ** 2, 0);
+  const sxz = pts.reduce((a, p) => a + (p.L - mx) * (p.z - mz), 0);
+  if (!(sxx > 0 && szz > 0 && sxz > 0)) return null;
+  const slope = sxz / sxx;
+  return { sigma: 1 / slope, mu: mx - mz / slope, r2: (sxz * sxz) / (sxx * szz) };
+}
+
+/**
+ * Basketball alternate totals: Pinnacle quotes one main line, Betika ~7. The spread (sigma)
+ * comes from Betika's own ladder for this game (it fits a normal curve almost exactly),
+ * the centre from Pinnacle's main line. A Betika line is +EV when Betika's centre is off
+ * from Pinnacle's by more than its margin. Only lines near the main line, stricter MIN_EV.
+ */
+function scanAltTotals(event, s, now, start, main, sharpSet, targetSet) {
+  const out = [];
+  for (const bm of event.bookmakers ?? []) {
+    if (sharpSet.has(bm.key) || (targetSet.size && !targetSet.has(bm.key))) continue;
+    const mkt = (bm.markets ?? []).find((m) => m.key === 'totals');
+    if (!mkt) continue;
+    const age = ageSeconds(bm, mkt, now);
+    if (age > s.maxLineAgeSeconds) continue;
+    const ladder = new Map();
+    for (const o of mkt.outcomes ?? []) {
+      if (!ladder.has(o.point)) ladder.set(o.point, { point: o.point });
+      ladder.get(o.point)[o.name === 'Over' ? 'over' : 'under'] = o.price;
+    }
+    const fit = fitTotalLadder([...ladder.values()]);
+    if (!fit || fit.r2 < 0.99 || fit.sigma < 8 || fit.sigma > 30) continue; // ladder doesn't look like a clean model
+    const muSharp = main.line - fit.sigma * om.normInv(1 - main.pOver);
+    const tax = s.winningsTax?.[bm.key] ?? 0;
+    for (const l of ladder.values()) {
+      if (l.point === main.line || Math.abs(l.point - main.line) > s.altTotalsMaxDistance) continue;
+      if (Math.abs(l.point % 1) !== 0.5) continue; // whole-number lines can push
+      const pOver = 1 - om.normCdf((l.point - muSharp) / fit.sigma);
+      for (const [name, price, p] of [['Over', l.over, pOver], ['Under', l.under, 1 - pOver]]) {
+        if (!price || price < s.minDecimalOdds || price > s.maxDecimalOdds) continue;
+        const effective = om.afterTax(price, tax);
+        const ev = om.expectedValue(p, effective);
+        if (!(ev >= Math.max(s.altTotalsMinEv, s.minEv))) continue;
+        out.push({
+          sport: event.sport_key ?? '', eventId: event.id,
+          homeTeam: event.home_team ?? '', awayTeam: event.away_team ?? '', commenceTime: start,
+          market: 'totals', description: null, outcome: name, point: l.point,
+          book: bm.key, bookTitle: bm.title ?? bm.key,
+          decimal: price, effectiveDecimal: effective, winningsTax: tax,
+          fairProb: p, ev, stake: om.stake(p, effective, s.bankroll, s.kellyFraction, s.maxStakePct),
+          sharpBooks: main.sharps, lineAgeSeconds: age, betikaRef: event.betikaRef ?? null,
+          model: { kind: 'alt-total', mainLine: main.line, sigma: fit.sigma, muSharp, muBook: fit.mu },
         });
       }
     }

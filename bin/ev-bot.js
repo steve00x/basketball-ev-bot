@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { BetikaAPI } from '../src/betika/api.js';
 import { BetikaClient } from '../src/betika/client.js';
 import { BetikaExecutor } from '../src/betika/executor.js';
-import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, fetchEvents, loadDemoEvents, marketsFor, resolveKeys, runCycle } from '../src/bot.js';
+import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, fetchEvents, loadDemoEvents, marketsFor, nextScanPlan, resolveKeys, runCycle } from '../src/bot.js';
 import { SPORTS, sportGroup } from '../src/sports.js';
 import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
@@ -96,17 +96,34 @@ async function scan() {
     log.info(`betika: ${s.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - bet slips are filled, never submitted'}`
       + ` | winnings tax ${(s.winningsTax.betika * 100).toFixed(0)}%`);
   }
-  log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`);
+  log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`
+    + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`
+    + ` | fast scans ${s.fastScanMinutes > 0 ? `every ${Math.round(s.fastPollSeconds / 60)} min within ${s.fastScanMinutes} min of ${s.fastScanSports.join('/')} games` : 'off'}`);
   try {
+    const fastGroups = s.fastScanSports;
+    let lastFull = 0;
+    let upcoming = []; // start times of fast-sport games, for pre-start fast scans
+    let kind = 'full';
     while (!stopping) {
       try {
-        const events = await fetchEvents(api, s, log);
+        let events;
+        if (kind === 'full') {
+          events = await fetchEvents(api, s, log);
+          lastFull = Date.now();
+          upcoming = events.filter((e) => fastGroups.includes(sportGroup(e.sport_key ?? ''))).map((e) => +new Date(e.commence_time));
+        } else {
+          log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
+          events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
+        }
         await runCycle({ events, s, store, notifier, betika: feed, executor, log });
       } catch (e) {
         log.error(`cycle failed: ${e.stack ?? e}`);
       }
       if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
-      for (let t = 0; t < s.pollSeconds && !stopping; t++) await sleep(1000);
+      const plan = nextScanPlan({ now: Date.now(), lastFull, s, upcoming });
+      kind = plan.kind;
+      if (plan.waitMs > 0) log.info(`next ${plan.kind} scan in ${Math.round(plan.waitMs / 60_000)} min`);
+      for (let t = 0; t < plan.waitMs / 1000 && !stopping; t++) await sleep(1000);
     }
   } finally {
     await client?.close();

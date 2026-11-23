@@ -82,7 +82,7 @@ line that settles the same way.
 
 | Sport | Betika market used | Notes |
 |---|---|---|
-| Basketball | Winner (incl. OT), Total (incl. OT) | NBA, NCAAB, EuroLeague. Betika has no basketball handicap market |
+| Basketball | Winner (incl. OT), Total (incl. OT) incl. alternate lines | NBA, NCAAB, EuroLeague. Alternate total lines are priced from Pinnacle's main line with the spread measured from Betika's own ladder (`ALT_TOTALS`, stricter `ALT_TOTALS_MIN_EV`). Betika has no basketball handicap market |
 | Soccer | 1X2 (with draw), Total | both are 90 minutes, like Pinnacle. `soccer` = top 8 leagues, `soccer_small` = ~40 lower/mid leagues (League One/Two, 2. Bundesliga, Serie B, Eredivisie, Scotland, Scandinavia, MLS, J-League, ...), `soccer_all` = everything in season. `MARKETS_SOCCER=h2h` halves the cost |
 | Ice hockey | Winner (incl. overtime and penalties) | Betika's hockey 1X2/Total are regulation-only, so not used |
 | Tennis, table tennis, volleyball, boxing | Winner | |

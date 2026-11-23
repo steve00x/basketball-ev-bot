@@ -70,10 +70,12 @@ export function bookPlan(s) {
  * or exact keys ("soccer_epl"); groups expand to whatever is in season, via the free
  * /v4/sports call (cached for 6 hours).
  */
-const sportsCache = { at: 0, list: null };
+// The in-season list is cached per Odds API client (6 hours); `lastSportsList` serves the sports command.
+let lastSportsList = null;
 export async function resolveKeys(api, s, log = console) {
   const needsList = s.sports.some((e) => SPORTS[e.toLowerCase()] || ['soccer', 'soccer_small', 'soccer_all'].includes(e.toLowerCase()));
   if (!needsList) return s.sports;
+  const sportsCache = (api.sportsCache ??= { at: 0, list: null });
   if (!sportsCache.list || Date.now() - sportsCache.at > 6 * 3600_000) {
     try {
       sportsCache.list = await api.getSports();
@@ -83,6 +85,7 @@ export async function resolveKeys(api, s, log = console) {
       return s.sports.filter((e) => !SPORTS[e.toLowerCase()]);
     }
   }
+  lastSportsList = sportsCache.list;
   const { keys, missing } = resolveSportKeys(s.sports, sportsCache.list);
   if (missing.length) log.info(`no Pinnacle-priced events on The Odds API right now for: ${missing.join(', ')}`);
   return keys;
@@ -97,17 +100,22 @@ export const marketsFor = (key, s) => {
 };
 
 /** Every in-season Odds API key of a sport group, from the cached /v4/sports list. */
-export const activeKeysFor = (group) => (sportsCache.list ?? [])
+export const activeKeysFor = (group) => (lastSportsList ?? [])
   .filter((x) => x.active !== false && !x.has_outrights && sportGroup(x.key) === group).map((x) => x.key);
 
-export async function fetchEvents(api, s, log = console) {
+/**
+ * opts.onlyGroups: only these sport groups (fast pre-start scans);
+ * opts.horizonHours: look only this far ahead (leagues without a game that soon are skipped for free).
+ */
+export async function fetchEvents(api, s, log = console, opts = {}) {
   const { apiBooks } = bookPlan(s);
   const now = new Date();
-  const horizon = new Date(+now + s.maxHoursToStart * 3600_000);
+  const horizon = new Date(+now + (opts.horizonHours ?? s.maxHoursToStart) * 3600_000);
   const all = [];
-  const keys = await resolveKeys(api, s, log);
+  let keys = await resolveKeys(api, s, log);
+  if (opts.onlyGroups) keys = keys.filter((k) => opts.onlyGroups.includes(sportGroup(k)));
   const cost = keys.reduce((n, k) => n + marketsFor(k, s).length, 0);
-  log.info(`scanning ${keys.length} leagues: ${keys.join(', ')} (~${cost} credits per scan)`);
+  if (!opts.quietKeys) log.info(`scanning ${keys.length} leagues: ${keys.join(', ')} (~${cost} credits per scan)`);
   let skipped = 0;
   for (const sport of keys) {
     const markets = marketsFor(sport, s);
@@ -154,7 +162,7 @@ export async function fetchEvents(api, s, log = console) {
     }
     all.push(...events);
   }
-  if (skipped) log.info(`skipped ${skipped} leagues with no games in the next ${s.maxHoursToStart}h (saved credits)`);
+  if (skipped && !opts.quietKeys) log.info(`skipped ${skipped} leagues with no games in the next ${opts.horizonHours ?? s.maxHoursToStart}h (saved credits)`);
   return all;
 }
 
@@ -201,4 +209,25 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
     }
   }
   return { opps: fresh, results };
+}
+
+/**
+ * When to scan next. A full scan every POLL_SECONDS; in between, if a game of a FAST_SCAN_SPORTS
+ * sport starts within FAST_SCAN_MINUTES, a fast scan (only those leagues, only that window)
+ * every FAST_POLL_SECONDS. `upcoming` = start times (ms) of fast-sport games from the last scans.
+ */
+export function nextScanPlan({ now, lastFull, s, upcoming = [] }) {
+  const fullDue = lastFull + s.pollSeconds * 1000;
+  if (now >= fullDue) return { kind: 'full', waitMs: 0 };
+  if (s.fastScanMinutes > 0) {
+    const windowMs = s.fastScanMinutes * 60_000;
+    const soon = upcoming.filter((t) => t > now).sort((a, b) => a - b)[0];
+    if (soon !== undefined) {
+      // fast scans while a game is inside the window; else wake up when the first game enters it
+      const enters = Math.max(soon - windowMs, now);
+      const wait = enters > now ? enters - now : s.fastPollSeconds * 1000;
+      if (now + wait < fullDue) return { kind: 'fast', waitMs: wait };
+    }
+  }
+  return { kind: 'full', waitMs: fullDue - now };
 }

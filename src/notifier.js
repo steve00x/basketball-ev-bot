@@ -12,6 +12,7 @@ export function formatOpportunity(o) {
     `${o.ev >= 0 ? '+' : '\u2212'}${Math.abs(o.ev * 100).toFixed(2)}% EV | ${league} | ${matchup(o)} (${tip})`,
     `  ${market}: ${selection(o)} @ ${o.bookTitle} ${o.decimal.toFixed(2)}`
       + (o.winningsTax ? ` (${o.effectiveDecimal.toFixed(3)} after ${Math.round(o.winningsTax * 100)}% tax)` : ''),
+    ...(o.model?.kind === 'alt-total' ? [`  Alt line: Pinnacle main ${o.model.mainLine}, centre ${o.model.muSharp.toFixed(1)} vs Betika ${o.model.muBook.toFixed(1)} (spread ±${o.model.sigma.toFixed(1)})`] : []),
     `  Fair ${((1 - (o.pushProb ?? 0)) / o.fairProb).toFixed(2)} (win ${(o.fairProb * 100).toFixed(1)}%${o.pushProb ? `, refund ${(o.pushProb * 100).toFixed(1)}%` : ''}) via ${o.sharpBooks.join(', ')}`
       + ` | Stake ${o.stake.toFixed(2)}`,
   ].join('\n');

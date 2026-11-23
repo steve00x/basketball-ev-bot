@@ -236,3 +236,71 @@ test('Draw No Bet price floor counts the refund', async () => {
   // (1 + 0.02 - 0.27) / 0.45 = 1.6667
   assert.deepEqual([sent[0].label, sent[0].minEffectiveOdds, sent[0].minOdds], ['1', 1.667, 1.667]);
 });
+
+test('alternate basketball totals: spread from Betika ladder, centre from Pinnacle', async () => {
+  const { fitTotalLadder } = await import('../src/scanner.js');
+  const { normCdf } = await import('../src/oddsMath.js');
+  // Betika ladder: normal(mu, 18) with ~4.5% margin, lines 225.5 .. 237.5
+  const ladder = (mu) => [225.5, 227.5, 228.5, 229.5, 231.5, 233.5, 234.5, 235.5, 237.5].map((L) => {
+    const pU = normCdf((L - mu) / 18), m = 1.045;
+    return { point: L, under: 1 / (pU * m), over: 1 / ((1 - pU) * m) };
+  });
+  const fit = fitTotalLadder(ladder(231.5));
+  assert.ok(Math.abs(fit.sigma - 18) < 0.01 && Math.abs(fit.mu - 231.5) < 0.01 && fit.r2 > 0.9999, JSON.stringify(fit));
+
+  const event = (betikaMu) => ({
+    id: 'nba1', sport_key: 'basketball_nba', home_team: 'H', away_team: 'A', commence_time: START.toISOString(), betikaRef: { sport: 'basketball' },
+    bookmakers: [
+      { key: 'pinnacle', title: 'Pinnacle', last_update: NOW.toISOString(), markets: [{ key: 'totals', outcomes: [
+        { name: 'Over', price: 1.95, point: 228.5 }, { name: 'Under', price: 1.95, point: 228.5 }] }] },
+      { key: 'betika', title: 'Betika', last_update: NOW.toISOString(), markets: [{ key: 'totals', outcomes:
+        ladder(betikaMu).flatMap((l) => [{ name: 'Over', price: l.over, point: l.point }, { name: 'Under', price: l.under, point: l.point }]) }] }],
+  });
+  const s = makeSettings({ ...S, winningsTax: {}, altTotals: true, altTotalsMinEv: 0.04, maxDecimalOdds: 5 });
+  // Betika centred 3 points higher than Pinnacle (231.5 vs 228.5): Unders above the main line are value
+  const opps = scanEvent(event(231.5), s, NOW).filter((o) => o.model);
+  assert.ok(opps.length > 0);
+  for (const o of opps) {
+    assert.equal(o.outcome, 'Under');
+    assert.ok(o.point !== 228.5 && Math.abs(o.point - 228.5) <= 6, `line ${o.point} must be an alternate within 6 of 228.5`);
+    assert.ok(o.ev >= 0.04);
+  }
+  assert.ok(opps.some((o) => o.point === 234.5) && opps.some((o) => o.point === 225.5));
+  assert.ok(!opps.some((o) => o.point === 235.5 || o.point === 237.5)); // more than 6 away: not trusted
+  // Same centre as Pinnacle: Betika's margin means nothing is +EV
+  assert.deepEqual(scanEvent(event(228.5), s, NOW).filter((o) => o.model), []);
+  // Switched off
+  assert.deepEqual(scanEvent(event(231.5), { ...s, altTotals: false }, NOW).filter((o) => o.model), []);
+});
+
+test('scan timing: full every POLL_SECONDS, fast scans only when a game starts soon', async () => {
+  const { nextScanPlan } = await import('../src/bot.js');
+  const min = 60_000, t0 = 1_000_000_000_000;
+  const s = makeSettings({ pollSeconds: 3 * 3600, fastScanMinutes: 120, fastPollSeconds: 300 });
+  assert.deepEqual(nextScanPlan({ now: t0, lastFull: 0, s }), { kind: 'full', waitMs: 0 }); // first scan
+  // nothing soon: wait for the next full scan
+  assert.deepEqual(nextScanPlan({ now: t0, lastFull: t0, s, upcoming: [t0 + 10 * 3600_000] }), { kind: 'full', waitMs: 3 * 3600_000 });
+  // a game in 60 min: fast scan in 5 min
+  assert.deepEqual(nextScanPlan({ now: t0, lastFull: t0, s, upcoming: [t0 + 60 * min] }), { kind: 'fast', waitMs: 300_000 });
+  // a game in 2h30: sleep until it is 2h away, then fast
+  assert.deepEqual(nextScanPlan({ now: t0, lastFull: t0, s, upcoming: [t0 + 150 * min] }), { kind: 'fast', waitMs: 30 * min });
+  // games already started don't count
+  assert.equal(nextScanPlan({ now: t0, lastFull: t0, s, upcoming: [t0 - min] }).kind, 'full');
+  // off by default
+  assert.equal(nextScanPlan({ now: t0, lastFull: t0, s: makeSettings({ pollSeconds: 3600 }), upcoming: [t0 + 30 * min] }).kind, 'full');
+});
+
+test('fast scan fetches only basketball leagues with a game inside the window', async () => {
+  const soon = new Date(Date.now() + 30 * 60_000).toISOString(), later = new Date(Date.now() + 5 * 3600_000).toISOString();
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url.pathname);
+    if (url.pathname.endsWith('/v4/sports')) return new Response(JSON.stringify([{ key: 'basketball_nba' }, { key: 'basketball_ncaab' }, { key: 'soccer_epl' }]), { status: 200 });
+    if (url.pathname.endsWith('/basketball_nba/events')) return new Response(JSON.stringify([{ commence_time: soon }]), { status: 200 });
+    if (url.pathname.endsWith('/events')) return new Response(JSON.stringify([{ commence_time: later }]), { status: 200 });
+    return new Response(JSON.stringify([{ id: 'x', sport_key: 'basketball_nba', commence_time: soon, home_team: 'A', away_team: 'B', bookmakers: [] }]), { status: 200 });
+  };
+  const s = makeSettings({ sports: ['basketball', 'soccer'], markets: ['h2h', 'totals'], betikaEnabled: true });
+  await fetchEvents(new OddsAPI('k', { fetchImpl }), s, quiet, { onlyGroups: ['basketball'], horizonHours: 2 });
+  assert.deepEqual(calls.filter((p) => p.endsWith('/odds')), ['/v4/sports/basketball_nba/odds']); // NCAAB later, EPL not basketball
+});
