@@ -1,17 +1,38 @@
 // Match Betika's team names ("LA Lakers") to The Odds API's ("Los Angeles Lakers").
 
-const STOPWORDS = new Set(['fc', 'bc', 'bk', 'kk', 'basketball', 'basket', 'club', 'the', 'team']);
+const STOPWORDS = new Set(['fc', 'bc', 'bk', 'kk', 'basketball', 'basket', 'club', 'the', 'team', 'and', 'of']);
 
-// Extend with any names you see mismatching (normalised form -> normalised form).
+// Same word, different spelling: "Indiana State" = "Indiana St", "Saint Mary's" = "St Mary's".
+const TOKEN_SYNONYMS = {
+  state: 'st', saint: 'st', international: 'int', intl: 'int', univ: 'university',
+  olympiakos: 'olympiacos', olimpia: 'olimpia', milano: 'milan',
+};
+
+// Whole-name aliases (normalised form -> normalised form). Add any you see failing.
 export const ALIASES = {
   'la lakers': 'los angeles lakers',
   'la clippers': 'los angeles clippers',
   'ny knicks': 'new york knicks',
-  'gs warriors': 'golden state warriors',
+  'gs warriors': 'golden st warriors',
   'okc thunder': 'oklahoma city thunder',
-  'philadelphia 76ers': 'philadelphia 76ers',
   'phila 76ers': 'philadelphia 76ers',
   'portland trailblazers': 'portland trail blazers',
+  // NCAA
+  'ole miss': 'mississippi', 'ole miss rebels': 'mississippi rebels',
+  'byu': 'brigham young', 'byu cougars': 'brigham young cougars',
+  'sfa lumberjacks': 'stephen austin lumberjacks', 'sfa': 'stephen austin',
+  'uconn': 'connecticut', 'uconn huskies': 'connecticut huskies',
+  'unlv': 'nevada las vegas', 'unlv rebels': 'nevada las vegas rebels',
+  // EuroLeague
+  'cz mts': 'crvena zvezda', 'crvena zvezda mts': 'crvena zvezda', 'crvena zvezda meridianbet': 'crvena zvezda',
+  'red star belgrade': 'crvena zvezda',
+  'olympiacos piraeus': 'olympiacos', 'olympiacos bc': 'olympiacos',
+  'munich': 'bayern munich', 'bayern': 'bayern munich', 'fc bayern munich': 'bayern munich',
+  'anadolu efes istanbul': 'anadolu efes', 'efes': 'anadolu efes',
+  'fenerbahce beko': 'fenerbahce', 'fenerbahce beko istanbul': 'fenerbahce',
+  'ea7 emporio armani milan': 'olimpia milan', 'armani milan': 'olimpia milan', 'ax armani exchange milan': 'olimpia milan',
+  'zalgiris kaunas': 'zalgiris', 'partizan belgrade': 'partizan', 'virtus bologna': 'bologna',
+  'asvel villeurbanne': 'asvel', 'ldlc asvel': 'asvel', 'baskonia vitoria': 'baskonia', 'kosner baskonia': 'baskonia',
 };
 
 export function normaliseTeam(name) {
@@ -20,7 +41,8 @@ export function normaliseTeam(name) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .split(' ')
-    .filter((t) => t && !STOPWORDS.has(t))
+    .filter((t) => t.length > 1 && !STOPWORDS.has(t)) // drops initials: "B. Munich" -> "munich"
+    .map((t) => TOKEN_SYNONYMS[t] ?? t)
     .join(' ');
   return ALIASES[base] ?? base;
 }

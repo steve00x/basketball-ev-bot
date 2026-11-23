@@ -2,6 +2,9 @@
 // Verified against the live site on 2026-11-23.
 export const BETIKA_API = 'https://api.betika.com/v1/uo';
 export const BASKETBALL_SPORT_ID = 30;
+// period_id 9 = every upcoming match. Without it Betika returns only today's games
+// (Kenya time), so late-night NBA tip-offs were missing.
+export const ALL_UPCOMING_PERIOD = 9;
 
 /** Betika market ids (sub_type_id). Both include overtime, like Pinnacle's lines. */
 export const MARKETS = {
@@ -73,7 +76,7 @@ export class BetikaAPI {
     const all = [];
     for (let page = 1; page <= maxPages; page++) {
       const url = new URL(`${BETIKA_API}/matches`);
-      Object.entries({ sport_id: BASKETBALL_SPORT_ID, sub_type_id: subTypeId, page, limit, tab: -2, sort_id: 1, period_id: -1, esports: false })
+      Object.entries({ sport_id: BASKETBALL_SPORT_ID, sub_type_id: subTypeId, page, limit, sort_id: 1, period_id: ALL_UPCOMING_PERIOD, esports: false })
         .forEach(([k, v]) => url.searchParams.set(k, v));
       const res = await this.fetchImpl(url, { signal: AbortSignal.timeout(this.timeoutMs), headers: { accept: 'application/json' } });
       if (!res.ok) throw new Error(`Betika API ${url.pathname}: HTTP ${res.status}`);

@@ -176,3 +176,21 @@ test('unmatched reasons: missing game vs. similar names', () => {
   assert.equal(r.unmatched[0], 'San Antonio Spurs @ Sacramento Kings (not on Betika right now)');
   assert.match(r.unmatched[1], /names did not match - Betika has "Houston v LAC Clips"/);
 });
+
+test('NCAAB and EuroLeague name styles (Betika short vs Odds API long)', () => {
+  const pairs = [
+    // [Odds API style, Betika style as seen on api.betika.com]
+    ['Indiana St Sycamores', 'Indiana State'], ['Wright St Raiders', 'Wright'], ['St. Bonaventure Bonnies', 'St Bonaventure'],
+    ['Appalachian St Mountaineers', 'Appalachian State'], ['William & Mary Tribe', 'William And Mary'],
+    ['Florida Int\'l Golden Panthers', 'Florida Int.'], ['Ole Miss Rebels', 'Mississippi'], ['BYU Cougars', 'Brigham'],
+    ['Stephen F. Austin Lumberjacks', 'SFA Lumberjacks'], ['Akron Zips', 'Akron Zips'], ['Temple Owls', 'Temple Owls'],
+    ['Crvena Zvezda', 'CZ MTS'], ['Bayern Munich', 'B. Munich'], ['Olympiacos', 'Olympiakos Piraeus'],
+    ['Partizan Belgrade', 'KK Partizan'], ['Maccabi Tel Aviv', 'Maccabi Tel-Aviv'], ['Virtus Bologna', 'Bologna'],
+    ['Paris Basketball', 'Paris Basketball'], ['Valencia Basket', 'Valencia'], ['Panathinaikos', 'Panathinaikos'],
+  ];
+  for (const [odds, betika] of pairs) assert.ok(teamSimilarity(odds, betika) >= 0.75, `${odds} vs ${betika}: ${teamSimilarity(odds, betika)}`);
+  // must stay apart
+  for (const [a, b] of [['Georgia St Panthers', 'Georgia Bulldogs'], ['Maccabi Tel Aviv', 'Hapoel Tel-Aviv'], ['Los Angeles Clippers', 'LA Lakers']]) {
+    assert.ok(teamSimilarity(a, b) < 0.75, `${a} vs ${b}: ${teamSimilarity(a, b)}`);
+  }
+});
