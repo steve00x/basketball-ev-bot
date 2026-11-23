@@ -206,7 +206,17 @@ export class BetikaClient {
     } catch (e) {
       return { status: 'match_unavailable', message: e.message.split('\n')[0] };
     }
-    if (live && !(await this.isLoggedIn())) return { status: 'not_logged_in' };
+    if (live && !(await this.isLoggedIn())) {
+      // e.g. after a browser restart: log back in once, then reopen the match page
+      if (!this.phone || !this.password) return { status: 'not_logged_in' };
+      try {
+        await this.ensureLoggedIn();
+        await this.goto(this.sel.urls.match.replace('{parentMatchId}', parentMatchId), this.sel.match.market);
+      } catch (e) {
+        return { status: 'not_logged_in', message: e.message.split('\n')[0] };
+      }
+      if (!(await this.isLoggedIn())) return { status: 'not_logged_in' };
+    }
 
     const seen = await this.outcome(market, label);
     if (seen.error) return { status: seen.error };

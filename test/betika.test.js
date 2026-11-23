@@ -136,19 +136,35 @@ test('executor: tax-adjusted price floor, limits, halting', async () => {
   assert.equal((await ex.execute(fakeOpp({ eventId: 4, stake: 5 }))).reason, 'stake_too_small');
   assert.equal((await ex.execute(fakeOpp({ eventId: 5, market: 'spreads' }))).reason, 'unsupported_market');
 
-  const ex2 = new BetikaExecutor(s, client, new Store(':memory:'), { log: quiet });
+  // No confirmation: that match counts as possibly placed (never retried), others continue.
+  const ex2 = new BetikaExecutor(makeSettings({ betikaLive: true }), client, new Store(':memory:'), { log: quiet });
   status = 'unknown';
   await ex2.execute(fakeOpp({ eventId: 9 }));
-  assert.equal(ex2.halted, true);
+  assert.equal(ex2.halted, false);
+  assert.equal((await ex2.execute(fakeOpp({ eventId: 9 }))).reason, 'already_bet');
+  status = 'placed';
+  assert.equal((await ex2.execute(fakeOpp({ eventId: 10 }))).status, 'placed');
 });
 
-test('dry runs do not consume limits; repeated errors halt', async () => {
-  const s = makeSettings({ betikaLive: false, betikaMaxBetsPerDay: 1 });
+test('dry runs do not consume limits; errors restart the browser, 3 in a row pause then resume', async () => {
+  const s = makeSettings({ betikaLive: false, betikaMaxBetsPerDay: 1, betikaErrorPauseMinutes: 15 });
   const ok = new BetikaExecutor(s, { placeBet: async () => ({ status: 'dry_run' }) }, new Store(':memory:'), { log: quiet });
   for (let i = 0; i < 3; i++) assert.equal((await ok.execute(fakeOpp({ eventId: i }))).status, 'dry_run');
-  const bad = new BetikaExecutor(s, { placeBet: async () => { throw new Error('boom'); } }, new Store(':memory:'), { log: quiet });
-  for (let i = 0; i < 3; i++) await bad.execute(fakeOpp({ eventId: i }));
-  assert.equal(bad.halted, true);
+
+  let fail = true, closes = 0;
+  const flaky = { placeBet: async () => { if (fail) throw new Error('boom'); return { status: 'dry_run' }; }, close: async () => { closes++; } };
+  const ex = new BetikaExecutor(s, flaky, new Store(':memory:'), { log: quiet });
+  await ex.execute(fakeOpp({ eventId: 'a' }));
+  fail = false;
+  assert.equal((await ex.execute(fakeOpp({ eventId: 'b' }))).status, 'dry_run'); // one failure doesn't stop the next match
+  fail = true;
+  for (const id of ['c', 'd', 'e']) await ex.execute(fakeOpp({ eventId: id }));
+  assert.equal(closes, 4); // browser restarted after every error
+  assert.equal(ex.halted, false);
+  fail = false;
+  assert.equal((await ex.execute(fakeOpp({ eventId: 'f' }))).reason, 'paused_after_errors');
+  ex.pausedUntil = Date.now() - 1; // 15 minutes later...
+  assert.equal((await ex.execute(fakeOpp({ eventId: 'f' }))).status, 'dry_run');
 });
 
 test('executor halts when Betika confirms a different stake; logs ticket and balance', async () => {

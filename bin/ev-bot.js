@@ -95,13 +95,13 @@ async function scan() {
       } catch (e) {
         log.error(`cycle failed: ${e.stack ?? e}`);
       }
-      if (opt.once || executor?.halted) break;
+      if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
       for (let t = 0; t < s.pollSeconds && !stopping; t++) await sleep(1000);
     }
   } finally {
     await client?.close();
   }
-  return executor?.halted ? 2 : 0;
+  return 0;
 }
 
 async function withBrowser(fn, overrides) {

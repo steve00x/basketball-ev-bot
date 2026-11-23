@@ -53,6 +53,7 @@ export const DEFAULTS = Object.freeze({
   betikaMinStake: 10,
   betikaMaxStake: 500,
   betikaFixedStake: 0, // >0: bet exactly this much every time
+  betikaErrorPauseMinutes: 15,
   betikaDailyStakeLimit: 2000,
   betikaMaxBetsPerDay: 10,
   betikaSelectors: '',
@@ -101,6 +102,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     betikaMinStake: num('BETIKA_MIN_STAKE', d.betikaMinStake),
     betikaMaxStake: num('BETIKA_MAX_STAKE', d.betikaMaxStake),
     betikaFixedStake: num('BETIKA_FIXED_STAKE', d.betikaFixedStake),
+    betikaErrorPauseMinutes: num('BETIKA_ERROR_PAUSE_MINUTES', d.betikaErrorPauseMinutes),
     betikaDailyStakeLimit: num('BETIKA_DAILY_STAKE_LIMIT', d.betikaDailyStakeLimit),
     betikaMaxBetsPerDay: num('BETIKA_MAX_BETS_PER_DAY', d.betikaMaxBetsPerDay),
     betikaSelectors: str('BETIKA_SELECTORS', ''),

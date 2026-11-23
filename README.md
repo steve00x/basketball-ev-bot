@@ -66,8 +66,12 @@ node bin/ev-bot.js scan         # keep scanning every POLL_SECONDS
 3. The slip must hold exactly one selection, in the right market, at an acceptable price.
 4. The stake box and the Place Bet button's `amount` must equal the stake exactly, and `totalodds` must still clear the floor.
 5. Final Payout ÷ stake (Betika's own after-tax figure) must clear the floor (`payout_too_low`).
-6. After clicking, it waits for Betika's bet API reply. If no clear reply comes, the status is `unknown` and **the bot stops**,
-   because the bet may have gone through. It also stops after 3 errors in a row.
+6. After clicking, it waits for Betika's bet API reply. With no clear reply the bet is logged as
+   `unknown`: that match is treated as possibly placed (never retried, counts toward the daily limits),
+   you get an alert to check your bet history, and the bot carries on with other matches.
+7. A failed bet never stops the others. After an error the browser is restarted (and logged back in if
+   needed). After 3 errors in a row, betting pauses `BETIKA_ERROR_PAUSE_MINUTES` (15) and then resumes.
+   Only a stake mismatch (Betika confirming a different stake) stops betting; scanning continues.
 
 Every attempt is logged to `ev-bot-store.json`.
 

@@ -9,13 +9,17 @@ const LIVE_STATUSES = new Set(['placed', 'unknown']);
 export class BetikaExecutor {
   constructor(settings, client, store, { log = console, notify = async () => {} } = {}) {
     Object.assign(this, { s: settings, client, store, log, notify });
-    this.halted = false;
+    this.halted = false;         // only for a stake mismatch: scanning continues, betting stops
     this.consecutiveErrors = 0;
+    this.pausedUntil = 0;        // after repeated errors, betting pauses briefly, then resumes
   }
+
+  get pauseMs() { return (this.s.betikaErrorPauseMinutes ?? 15) * 60_000; }
 
   /** Returns a reason string if the bet must be skipped, else null. */
   check(opp, stake) {
     if (this.halted) return 'halted';
+    if (Date.now() < this.pausedUntil) return 'paused_after_errors';
     if (opp.book !== 'betika') return 'not_betika';
     if (!opp.betikaRef || !betikaPick(opp)) return 'unsupported_market';
     if (this.store.hasBet(dedupeKey(opp))) return 'already_bet';
@@ -52,7 +56,15 @@ export class BetikaExecutor {
       this.consecutiveErrors = 0;
     } catch (e) {
       result = { status: 'error', message: e.message };
-      if (++this.consecutiveErrors >= 3) this.halt('3 consecutive errors - check selectors / login');
+      // A crashed or stuck browser is the usual cause: start a fresh one for the next bet.
+      await this.client.close?.().catch(() => {});
+      if (++this.consecutiveErrors >= 3) {
+        this.consecutiveErrors = 0;
+        this.pausedUntil = Date.now() + this.pauseMs;
+        const mins = Math.round(this.pauseMs / 60_000);
+        this.log.warn?.(`betika: 3 errors in a row - pausing bets for ${mins} min, then resuming`);
+        this.notify(`Betika bot: 3 errors in a row, betting paused ${mins} min (last: ${e.message})`).catch(() => {});
+      }
     }
 
     this.store.recordBet({
@@ -67,8 +79,12 @@ export class BetikaExecutor {
       + `stake KES ${stake} @ ${result.odds ?? '?'} (min ${bet.minOdds})${bal}${result.message && result.status !== 'placed' ? ` - ${result.message}` : ''}`;
     this.log.info?.(msg);
     if (result.status !== 'dry_run' || this.s.betikaLive) await this.notify(msg);
-    // An unconfirmed click may have placed the bet: stop and let a human check.
-    if (result.status === 'unknown') this.halt('bet confirmation not seen - check your Betika bet history');
+    // An unconfirmed click may have placed the bet. It's recorded as possibly placed, so this
+    // match is never bet again and it counts toward the daily limits; other matches continue.
+    if (result.status === 'unknown') {
+      this.log.warn?.(`betika: no confirmation for ${selection(opp)} - treating it as possibly placed, check your bet history`);
+      await this.notify(`Betika: check your bet history - no confirmation seen for ${selection(opp)} (${matchup(opp)}), KES ${stake}`).catch(() => {});
+    }
     if (result.stakeMismatch) this.halt(`Betika confirmed stake KES ${result.confirmedStake}, expected ${stake} - check ticket ${result.betId}`);
     return result;
   }
