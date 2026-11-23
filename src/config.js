@@ -72,6 +72,9 @@ export const DEFAULTS = Object.freeze({
   altTotals: true,
   altTotalsMinEv: 0.04,
   altTotalsMaxDistance: 6,
+  teamTotals: true,
+  teamTotalsMinEv: 0.04,
+  teamTotalsMaxDistance: 4,
   // Faster scans shortly before games start (0 = off). Only leagues with games in the window are fetched.
   fastScanMinutes: 0,
   fastPollSeconds: 300,
@@ -128,6 +131,9 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     altTotals: bool('ALT_TOTALS', d.altTotals),
     altTotalsMinEv: num('ALT_TOTALS_MIN_EV', d.altTotalsMinEv),
     altTotalsMaxDistance: num('ALT_TOTALS_MAX_DISTANCE', d.altTotalsMaxDistance),
+    teamTotals: bool('TEAM_TOTALS', d.teamTotals),
+    teamTotalsMinEv: num('TEAM_TOTALS_MIN_EV', d.teamTotalsMinEv),
+    teamTotalsMaxDistance: num('TEAM_TOTALS_MAX_DISTANCE', d.teamTotalsMaxDistance),
     fastScanMinutes: num('FAST_SCAN_MINUTES', d.fastScanMinutes),
     fastPollSeconds: num('FAST_POLL_SECONDS', d.fastPollSeconds),
     fastScanSports: list('FAST_SCAN_SPORTS', d.fastScanSports).map((x) => x.toLowerCase()),
@@ -144,11 +150,12 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);
   if (s.altTotalsMinEv < 0 || s.altTotalsMinEv > 0.5) fail(`ALT_TOTALS_MIN_EV=${s.altTotalsMinEv} must be between 0 and 0.5`);
+  if (s.teamTotalsMinEv < 0 || s.teamTotalsMinEv > 0.5) fail(`TEAM_TOTALS_MIN_EV=${s.teamTotalsMinEv} must be between 0 and 0.5`);
   if (s.fastScanMinutes > 0 && s.fastPollSeconds < 60) fail('FAST_POLL_SECONDS must be at least 60');
   if (s.minEv < 0) fail(`MIN_EV=${s.minEv} is negative: that would bet on losing prices`);
   if (s.minEv > 0.5) fail(`MIN_EV=${s.minEv} looks wrong (it is a fraction: 0.02 means 2%)`);

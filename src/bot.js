@@ -95,8 +95,10 @@ export async function resolveKeys(api, s, log = console) {
 export const marketsFor = (key, s) => {
   const group = sportGroup(key) ?? '';
   const spec = SPORTS[group];
-  const wanted = s.marketsBySport?.[group] ?? s.markets;
-  return spec ? wanted.filter((m) => spec.oddsMarkets.includes(m)) : wanted;
+  let wanted = s.marketsBySport?.[group] ?? s.markets;
+  // Team totals need Pinnacle's point spread (the expected margin): +1 credit per basketball league.
+  if (group === 'basketball' && s.teamTotals && wanted.includes('totals') && !wanted.includes('spreads')) wanted = [...wanted, 'spreads'];
+  return spec ? wanted.filter((m) => spec.oddsMarkets.includes(m) || (m === 'spreads' && group === 'basketball' && s.teamTotals)) : wanted;
 };
 
 /** Every in-season Odds API key of a sport group, from the cached /v4/sports list. */

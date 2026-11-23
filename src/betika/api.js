@@ -35,7 +35,7 @@ export function parseListings(winnerJson, totalJson, spec = SPORTS.basketball, s
         sport, parentMatchId: String(m.parent_match_id), matchId: String(m.match_id),
         home: m.home_team, away: m.away_team, start: parseEat(m.start_time),
         competition: m.competition_name, category: m.category, winner: null, draw: null, totals: [],
-        doubleChance: null, drawNoBet: null,
+        doubleChance: null, drawNoBet: null, teamTotals: null,
       });
     }
     return byId.get(m.parent_match_id);
@@ -80,6 +80,27 @@ export function parseListings(winnerJson, totalJson, spec = SPORTS.basketball, s
       }
       base(m).totals = [...lines.values()].filter((l) => l.over && l.under).sort((a, b) => a.point - b.point);
     }
+    // Team totals arrive in the same listing call (sub_type_id=225,227,228)
+    if (spec.teamTotals) {
+      for (const m of totalJson?.data ?? []) {
+        const ladder = (st) => {
+          const mk = (m.odds ?? []).find((o) => Number(o.sub_type_id) === st);
+          if (!mk) return [];
+          const lines = new Map();
+          for (const o of mk.odds) {
+            const side = /over|under/i.exec(`${o.odd_key ?? ''} ${o.display ?? ''}`)?.[0]?.toLowerCase();
+            const pt = /total=([\d.]+)/.exec(o.special_bet_value ?? '')?.[1];
+            const price = num(o.odd_value);
+            if (!side || pt === undefined || !price) continue;
+            if (!lines.has(Number(pt))) lines.set(Number(pt), { point: Number(pt) });
+            lines.get(Number(pt))[side] = price;
+          }
+          return [...lines.values()].filter((l) => l.over && l.under).sort((a, b) => a.point - b.point);
+        };
+        const h = ladder(spec.teamTotals.homeSubType), a = ladder(spec.teamTotals.awaySubType);
+        if (h.length || a.length) base(m).teamTotals = { home: h, away: a };
+      }
+    }
   }
   return [...byId.values()];
 }
@@ -112,7 +133,7 @@ export class BetikaAPI {
     const opts = { sportId: spec.betikaSportId };
     const [winner, total] = await Promise.all([
       this.listing([spec.h2h.subType, spec.doubleChance?.subType, spec.drawNoBet?.subType].filter(Boolean).join(','), opts),
-      spec.totals ? this.listing(spec.totals.subType, opts) : Promise.resolve(null),
+      spec.totals ? this.listing([spec.totals.subType, spec.teamTotals?.homeSubType, spec.teamTotals?.awaySubType].filter(Boolean).join(','), opts) : Promise.resolve(null),
     ]);
     return parseListings(winner, total, spec, sport);
   }

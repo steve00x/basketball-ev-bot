@@ -15,6 +15,8 @@ export const SPORTS = {
     oddsMarkets: ['h2h', 'totals'],
     h2h: { subType: 219, title: 'Winner (Incl. Overtime)', draw: false },
     totals: { subType: 225, title: 'Total (Incl. Overtime)' },
+    // "<TEAM> TOTAL (INCL. OVERTIME)": 227 = Betika's first-listed team, 228 = second. Model-priced.
+    teamTotals: { homeSubType: 227, awaySubType: 228, titleSuffix: 'Total (Incl. Overtime)' },
   },
   soccer: {
     // 90 minutes + stoppage time on both sides; Pinnacle soccer h2h is 3-way.

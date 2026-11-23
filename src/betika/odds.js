@@ -62,6 +62,16 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
         { name: ev.home_team, code: 'H', price: hit.swapped ? b2 : b1 },
         { name: ev.away_team, code: 'A', price: hit.swapped ? b1 : b2 }] });
     }
+    // Team totals: Betika's first-listed team is our home team unless swapped
+    if (m.teamTotals) {
+      const teams = [
+        { ladder: m.teamTotals.home, ours: hit.swapped ? 'A' : 'H', betikaTeam: m.home },
+        { ladder: m.teamTotals.away, ours: hit.swapped ? 'H' : 'A', betikaTeam: m.away }];
+      const outcomes = teams.flatMap(({ ladder, ours, betikaTeam }) => ladder.flatMap((l) => ['over', 'under'].map((k) => ({
+        name: k === 'over' ? 'Over' : 'Under', price: l[k], point: l.point,
+        description: ours === 'H' ? ev.home_team : ev.away_team, side: ours, betikaTeam }))));
+      if (outcomes.length) markets.push({ key: 'team_totals', last_update: ts, outcomes });
+    }
     if (m.totals?.length) {
       markets.push({ key: 'totals', last_update: ts, outcomes: m.totals.flatMap((l) => [
         { name: 'Over', price: l.over, point: l.point }, { name: 'Under', price: l.under, point: l.point }]) });
@@ -94,6 +104,9 @@ export function betikaPick(opp) {
   }
   if (opp.market === 'draw_no_bet' && spec.drawNoBet && opp.code) {
     return { market: spec.drawNoBet.title, label: sym(opp.code) };
+  }
+  if (opp.market === 'team_totals' && spec.teamTotals && opp.betikaTeam) {
+    return { market: `${opp.betikaTeam} ${spec.teamTotals.titleSuffix}`, label: `${opp.outcome} ${opp.point}` };
   }
   if (opp.market === 'totals' && spec.totals) {
     return { market: spec.totals.title, label: `${opp.outcome} ${opp.point}` };

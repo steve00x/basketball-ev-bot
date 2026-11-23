@@ -64,6 +64,7 @@ export function scanEvent(event, s, now = new Date()) {
   const opps = [];
   let threeWay = null;
   let mainTotal = null;
+  let mainSpread = null;
   for (const { market, description, books } of lines.values()) {
     const sharps = [...books.keys()].filter((b) => sharpSet.has(b));
     if (!sharps.length) continue;
@@ -74,6 +75,15 @@ export function scanEvent(event, s, now = new Date()) {
       const entries = [...books.get(b).prices];
       const probs = om.devig(entries.map(([, o]) => o.price), s.devigMethod);
       entries.forEach(([k], i) => fair.set(k, (fair.get(k) ?? 0) + probs[i] / sharps.length));
+    }
+
+    // Remember the sharp main spread (home line, fair P(home covers)) for team totals.
+    if (market === 'spreads' && !description) {
+      const home = [...books.get(sharps[0]).prices].find(([, o]) => o.name === event.home_team);
+      if (home) {
+        const p = fair.get(home[0]);
+        if (p && (!mainSpread || Math.abs(p - 0.5) < Math.abs(mainSpread.pCover - 0.5))) mainSpread = { homePoint: home[1].point, pCover: p };
+      }
     }
 
     // Remember the sharp main total (fair P(Over) at its line) for the alternate-totals model.
@@ -127,6 +137,9 @@ export function scanEvent(event, s, now = new Date()) {
   if (threeWay) opps.push(...scanDerived(event, s, now, start, threeWay, sharpSet, targetSet));
   if (mainTotal && s.altTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
     opps.push(...scanAltTotals(event, s, now, start, mainTotal, sharpSet, targetSet));
+  }
+  if (mainTotal && mainSpread && s.teamTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
+    opps.push(...scanTeamTotals(event, s, now, start, mainTotal, mainSpread, sharpSet, targetSet));
   }
   return opps;
 }
@@ -227,6 +240,68 @@ function scanAltTotals(event, s, now, start, main, sharpSet, targetSet) {
           fairProb: p, ev, stake: om.stake(p, effective, s.bankroll, s.kellyFraction, s.maxStakePct),
           sharpBooks: main.sharps, lineAgeSeconds: age, betikaRef: event.betikaRef ?? null,
           model: { kind: 'alt-total', mainLine: main.line, sigma: fit.sigma, muSharp, muBook: fit.mu },
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Basketball team totals. Each team's expected score from Pinnacle:
+ *   game centre  = main total line, adjusted by its fair P(Over) (spread from Betika's game ladder)
+ *   home margin  = -(home spread) + sigmaMargin x probit(P(home covers))
+ *   home = (centre + margin) / 2,  away = (centre - margin) / 2
+ * Each team's spread (sigma) comes from Betika's own ladder for that team. Lines within
+ * TEAM_TOTALS_MAX_DISTANCE of the team's expected score, TEAM_TOTALS_MIN_EV threshold.
+ */
+function scanTeamTotals(event, s, now, start, main, spread, sharpSet, targetSet) {
+  const out = [];
+  const sigmaMargin = event.sport_key === 'basketball_nba' ? 13 : 11;
+  for (const bm of event.bookmakers ?? []) {
+    if (sharpSet.has(bm.key) || (targetSet.size && !targetSet.has(bm.key))) continue;
+    const game = (bm.markets ?? []).find((m) => m.key === 'totals');
+    const tt = (bm.markets ?? []).find((m) => m.key === 'team_totals');
+    if (!game || !tt) continue;
+    const age = ageSeconds(bm, tt, now);
+    if (age > s.maxLineAgeSeconds) continue;
+    const ladderOf = (outs) => {
+      const map = new Map();
+      for (const o of outs) {
+        if (!map.has(o.point)) map.set(o.point, { point: o.point });
+        map.get(o.point)[o.name === 'Over' ? 'over' : 'under'] = o.price;
+      }
+      return [...map.values()];
+    };
+    const gameFit = fitTotalLadder(ladderOf(game.outcomes ?? []));
+    if (!gameFit || gameFit.r2 < 0.99 || gameFit.sigma < 8 || gameFit.sigma > 30) continue;
+    const muTotal = main.line - gameFit.sigma * om.normInv(1 - main.pOver);
+    const margin = -spread.homePoint + sigmaMargin * om.normInv(spread.pCover);
+    const centre = { H: (muTotal + margin) / 2, A: (muTotal - margin) / 2 };
+    const tax = s.winningsTax?.[bm.key] ?? 0;
+    for (const side of ['H', 'A']) {
+      const outs = (tt.outcomes ?? []).filter((o) => o.side === side);
+      if (!outs.length) continue;
+      const fit = fitTotalLadder(ladderOf(outs));
+      if (!fit || fit.r2 < 0.99 || fit.sigma < 5 || fit.sigma > 20) continue;
+      const mu = centre[side];
+      for (const o of outs) {
+        if (Math.abs(o.point % 1) !== 0.5 || Math.abs(o.point - mu) > s.teamTotalsMaxDistance) continue;
+        if (o.price < s.minDecimalOdds || o.price > s.maxDecimalOdds) continue;
+        const pOver = 1 - om.normCdf((o.point - mu) / fit.sigma);
+        const p = o.name === 'Over' ? pOver : 1 - pOver;
+        const effective = om.afterTax(o.price, tax);
+        const ev = om.expectedValue(p, effective);
+        if (!(ev >= Math.max(s.teamTotalsMinEv, s.minEv))) continue;
+        out.push({
+          sport: event.sport_key ?? '', eventId: event.id,
+          homeTeam: event.home_team ?? '', awayTeam: event.away_team ?? '', commenceTime: start,
+          market: 'team_totals', description: o.description, outcome: o.name, point: o.point,
+          betikaTeam: o.betikaTeam, book: bm.key, bookTitle: bm.title ?? bm.key,
+          decimal: o.price, effectiveDecimal: effective, winningsTax: tax,
+          fairProb: p, ev, stake: om.stake(p, effective, s.bankroll, s.kellyFraction, s.maxStakePct),
+          sharpBooks: main.sharps, lineAgeSeconds: age, betikaRef: event.betikaRef ?? null,
+          model: { kind: 'team-total', team: o.description, centre: mu, sigma: fit.sigma, centreBook: fit.mu },
         });
       }
     }

@@ -144,7 +144,8 @@ test('soccer_small: lower leagues, only those in season; MARKETS_SOCCER halves t
 
   const s = makeSettings({ markets: ['h2h', 'totals'], marketsBySport: { soccer: ['h2h'] } });
   assert.deepEqual(marketsFor('soccer_england_league1', s), ['h2h']);
-  assert.deepEqual(marketsFor('basketball_nba', s), ['h2h', 'totals']); // other sports unchanged
+  assert.deepEqual(marketsFor('basketball_nba', s), ['h2h', 'totals', 'spreads']); // other sports unchanged (+ spread for team totals)
+  assert.deepEqual(marketsFor('basketball_nba', { ...s, teamTotals: false }), ['h2h', 'totals']);
 
   const { settingsFromEnv } = await import('../src/config.js');
   process.env.MARKETS_SOCCER = 'h2h';
@@ -303,4 +304,44 @@ test('fast scan fetches only basketball leagues with a game inside the window', 
   const s = makeSettings({ sports: ['basketball', 'soccer'], markets: ['h2h', 'totals'], betikaEnabled: true });
   await fetchEvents(new OddsAPI('k', { fetchImpl }), s, quiet, { onlyGroups: ['basketball'], horizonHours: 2 });
   assert.deepEqual(calls.filter((p) => p.endsWith('/odds')), ['/v4/sports/basketball_nba/odds']); // NCAAB later, EPL not basketball
+});
+
+test('team totals: expected score per team from Pinnacle total + spread, spread from Betika ladder', async () => {
+  const { normCdf } = await import('../src/oddsMath.js');
+  const mk = (mu, sigma, lines) => lines.map((L) => { const pU = normCdf((L - mu) / sigma), m = 1.045; return { point: L, under: 1 / (pU * m), over: 1 / ((1 - pU) * m) }; });
+  // Pinnacle: total 228.5 at 50/50, home -6.5 at 50/50 => home (228.5+6.5)/2 = 117.5, away 111 expected
+  // Betika: game ladder centred 228.5 (no game-total edge); its home ladder centred 3 pts too low (114.25)
+  const betikaMarkets = [
+    { key: 'totals', outcomes: mk(228.5, 18, [222.5, 225.5, 228.5, 231.5, 234.5]).flatMap((l) => [
+      { name: 'Over', price: l.over, point: l.point }, { name: 'Under', price: l.under, point: l.point }]) },
+    { key: 'team_totals', outcomes: [
+      ...mk(114.25, 10, [113.5, 114.5, 115.5, 116.5, 117.5]).flatMap((l) => [
+        { name: 'Over', price: l.over, point: l.point, description: 'Home Team', side: 'H', betikaTeam: 'Home' },
+        { name: 'Under', price: l.under, point: l.point, description: 'Home Team', side: 'H', betikaTeam: 'Home' }]),
+      ...mk(111.25, 10, [109.5, 110.5, 111.5, 112.5, 113.5]).flatMap((l) => [
+        { name: 'Over', price: l.over, point: l.point, description: 'Away Team', side: 'A', betikaTeam: 'Away' },
+        { name: 'Under', price: l.under, point: l.point, description: 'Away Team', side: 'A', betikaTeam: 'Away' }])] }];
+  const event = {
+    id: 'nba2', sport_key: 'basketball_nba', home_team: 'Home Team', away_team: 'Away Team', commence_time: START.toISOString(),
+    betikaRef: { sport: 'basketball', swapped: false },
+    bookmakers: [
+      { key: 'pinnacle', title: 'Pinnacle', last_update: NOW.toISOString(), markets: [
+        { key: 'totals', outcomes: [{ name: 'Over', price: 1.95, point: 228.5 }, { name: 'Under', price: 1.95, point: 228.5 }] },
+        { key: 'spreads', outcomes: [{ name: 'Home Team', price: 1.95, point: -6.5 }, { name: 'Away Team', price: 1.95, point: 6.5 }] }] },
+      { key: 'betika', title: 'Betika', last_update: NOW.toISOString(), markets: betikaMarkets }],
+  };
+  const s = makeSettings({ ...S, winningsTax: {}, teamTotals: true, teamTotalsMinEv: 0.04, altTotals: true });
+  const opps = scanEvent(event, s, NOW).filter((o) => o.market === 'team_totals');
+  assert.ok(opps.length > 0);
+  for (const o of opps) {
+    assert.deepEqual([o.description, o.outcome], ['Home Team', 'Over']); // Betika too low on the home team: Overs
+    assert.ok(Math.abs(o.model.centre - 117.5) < 0.01 && Math.abs(o.model.sigma - 10) < 0.01, JSON.stringify(o.model));
+    assert.ok(Math.abs(o.point - 117.5) <= 4);
+  }
+  const pick = betikaPick(opps[0]);
+  assert.equal(pick.market, 'Home Total (Incl. Overtime)');
+  assert.match(pick.label, /^Over 11\d\.5$/);
+  // no Pinnacle spread => no team totals (can't place the margin)
+  const noSpread = { ...event, bookmakers: [{ ...event.bookmakers[0], markets: [event.bookmakers[0].markets[0]] }, event.bookmakers[1]] };
+  assert.deepEqual(scanEvent(noSpread, s, NOW).filter((o) => o.market === 'team_totals'), []);
 });
