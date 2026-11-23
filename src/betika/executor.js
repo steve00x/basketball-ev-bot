@@ -58,12 +58,15 @@ export class BetikaExecutor {
       fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...result,
     });
 
-    const msg = `Betika ${result.status.toUpperCase()}: ${selection(opp)} (${matchup(opp)}) `
-      + `stake KES ${stake} @ ${result.odds ?? '?'} (min ${bet.minOdds})${result.message ? ` - ${result.message}` : ''}`;
+    const ticket = result.betId ? ` ticket ${result.betId}` : '';
+    const bal = result.balanceAfter != null ? ` | balance KES ${result.balanceAfter}` : '';
+    const msg = `Betika ${result.status.toUpperCase()}${ticket}: ${selection(opp)} (${matchup(opp)}) `
+      + `stake KES ${stake} @ ${result.odds ?? '?'} (min ${bet.minOdds})${bal}${result.message && result.status !== 'placed' ? ` - ${result.message}` : ''}`;
     this.log.info?.(msg);
     if (result.status !== 'dry_run' || this.s.betikaLive) await this.notify(msg);
     // An unconfirmed click may have placed the bet: stop and let a human check.
     if (result.status === 'unknown') this.halt('bet confirmation not seen - check your Betika bet history');
+    if (result.stakeMismatch) this.halt(`Betika confirmed stake KES ${result.confirmedStake}, expected ${stake} - check ticket ${result.betId}`);
     return result;
   }
 

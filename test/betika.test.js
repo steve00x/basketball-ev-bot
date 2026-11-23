@@ -150,3 +150,19 @@ test('dry runs do not consume limits; repeated errors halt', async () => {
   for (let i = 0; i < 3; i++) await bad.execute(fakeOpp({ eventId: i }));
   assert.equal(bad.halted, true);
 });
+
+test('executor halts when Betika confirms a different stake; logs ticket and balance', async () => {
+  const s = makeSettings({ betikaLive: true });
+  const logs = [];
+  const log = { info: (m) => logs.push(m), warn() {}, error: (m) => logs.push(m) };
+  const ok = { async placeBet(b) { return { status: 'placed', odds: 2.7, betId: 'LDCH8C', balanceAfter: 1243.79, confirmedStake: b.stake }; } };
+  const ex = new BetikaExecutor(s, ok, new Store(':memory:'), { log });
+  await ex.execute(fakeOpp({ eventId: 'a', stake: 20 }));
+  assert.equal(ex.halted, false);
+  assert.ok(logs.some((m) => /PLACED ticket LDCH8C/.test(m) && /balance KES 1243.79/.test(m)), logs.join('\n'));
+
+  const bad = { async placeBet() { return { status: 'placed', odds: 2.7, betId: 'X1', confirmedStake: 500, stakeMismatch: true }; } };
+  const ex2 = new BetikaExecutor(s, bad, new Store(':memory:'), { log });
+  await ex2.execute(fakeOpp({ eventId: 'b', stake: 20 }));
+  assert.equal(ex2.halted, true);
+});

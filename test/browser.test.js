@@ -21,7 +21,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(mode === 'reject' ? 400 : 200, { 'content-type': 'application/json' });
     return res.end(JSON.stringify(mode === 'reject'
       ? { success: false, message: 'Insufficient balance' }
-      : { success: true, message: 'Bet placed successfully', bet_id: 42 }));
+      : { // shape of Betika's real reply (values changed)
+        status_code: '201 Created', async: false,
+        message: `ABC123 confirmed.\nPossible win Ksh${(Number(mode === 'wrongstake' ? 50 : 200) * 1.64).toFixed(2)} from Ksh${mode === 'wrongstake' ? '50.00' : '200.00'} stake.\nNew Betika balance Ksh1,043.79\n-- \nFollow the results at betika.com/b/ABC123`,
+        ref: 'x', ticketId: 't', params: { bet_id: 111, bet_request_id: 't', short_bet_id: 'ABC123' } }));
   }
   res.writeHead(200, { 'content-type': 'text/html' });
   res.end(html);
@@ -75,8 +78,8 @@ test('live: clears old slip, places, reads bet API response', async () => {
   go('loggedin=1&preselected=1');
   const r = await client.placeBet({ ...PICK, minOdds: 1.6, stake: 200, live: true });
   assert.equal(r.status, 'placed', JSON.stringify(r));
-  assert.match(r.message, /placed successfully/);
-  assert.equal(r.response.bet_id, 42);
+  assert.deepEqual([r.betId, r.possibleWin, r.confirmedStake, r.balanceAfter], ['ABC123', 328, 200, 1043.79]);
+  assert.equal(r.stakeMismatch, undefined);
   const posted = await client.page.evaluate(() => window.posted);
   assert.deepEqual(posted.map((p) => [p.stake, p.odds]), [['200', 1.64]]);
 });
@@ -109,9 +112,26 @@ test('live: rejection and silence are reported, never assumed placed', async () 
   assert.equal(unk.status, 'unknown');
 });
 
+test('stake confirmed by Betika must match', async () => {
+  go('loggedin=1&mode=wrongstake');
+  const r = await client.placeBet({ ...PICK, minOdds: 1.6, stake: 200, live: true });
+  assert.equal(r.status, 'placed');
+  assert.equal(r.stakeMismatch, true);
+});
+
+test('classifyBetResponse on Betika\'s real reply', () => {
+  const real = { status_code: '201 Created', async: false,
+    message: 'LDCH8C confirmed.\nPossible win Ksh22.20 from Ksh10.00 stake.\nNew Betika balance Ksh1243.79\n-- \nFollow the results at betika.com/b/LDCH8C',
+    ref: 'q', ticketId: 't', params: { bet_id: 6691062283, bet_request_id: 't', short_bet_id: 'LDCH8C' } };
+  const v = classifyBetResponse(201, real);
+  assert.deepEqual([v.status, v.betId, v.possibleWin, v.confirmedStake, v.balanceAfter], ['placed', 'LDCH8C', 22.2, 10, 1243.79]);
+  assert.equal(classifyBetResponse(200, { status_code: '400 Bad Request', message: 'Odds have changed' }).status, 'rejected');
+  assert.equal(classifyBetResponse(200, { message: 'Insufficient balance to place bet' }).status, 'rejected');
+  assert.equal(classifyBetResponse(200, { status_code: '201 Created' }).status, 'unknown'); // no confirmation: halt
+});
+
 test('classifyBetResponse and redact', () => {
   assert.equal(classifyBetResponse(200, { success: true }).status, 'placed');
-  assert.equal(classifyBetResponse(200, { message: 'Bet placed successfully' }).status, 'placed');
   assert.equal(classifyBetResponse(200, { success: false, message: 'x' }).status, 'rejected');
   assert.equal(classifyBetResponse(500, 'oops').status, 'rejected');
   assert.equal(classifyBetResponse(200, { foo: 1 }).status, 'unknown');

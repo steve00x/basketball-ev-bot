@@ -21,18 +21,39 @@ export function redact(v) {
   return v;
 }
 
-/** Decide what Betika's bet-placement response means. Anything unclear is 'unknown'. */
+const money = (re, s) => { const m = re.exec(s); return m ? Number(m[1].replace(/,/g, '')) : null; };
+
+/**
+ * Decide what Betika's POST /v2/bet reply means. Anything unclear is 'unknown' (the bot halts).
+ * A real accepted reply (2026-11-23) looks like:
+ *   { status_code: "201 Created", message: "LDCH8C confirmed.\nPossible win Ksh22.20 from Ksh10.00 stake.\n
+ *     New Betika balance Ksh1243.79 ...", params: { bet_id: 6691062283, short_bet_id: "LDCH8C" } }
+ */
 export function classifyBetResponse(httpStatus, body) {
   const text = typeof body === 'string' ? body : JSON.stringify(body ?? '');
-  const msg = (typeof body === 'object' && (body?.message ?? body?.error?.message ?? body?.error)) || '';
-  if (httpStatus >= 400) return { status: 'rejected', message: String(msg || text).slice(0, 200) };
-  if (body?.success === false || body?.error || /insufficient|invalid|failed|not allowed|rejected|error/i.test(msg)) {
-    return { status: 'rejected', message: String(msg || text).slice(0, 200) };
+  const obj = body && typeof body === 'object' ? body : {};
+  const msg = String(obj.message ?? obj.error?.message ?? obj.error ?? '');
+  const code = parseInt(String(obj.status_code ?? ''), 10); // "201 Created" -> 201
+  const short = (s) => String(s).replace(/\s+/g, ' ').trim().slice(0, 200);
+
+  if (httpStatus >= 400 || code >= 400 || obj.success === false || obj.error
+      || /insufficient|invalid|failed|not allowed|rejected|suspended|expired|error/i.test(msg)) {
+    return { status: 'rejected', message: short(msg || text) };
   }
-  if (body?.success === true || /success|placed|accepted/i.test(text)) {
-    return { status: 'placed', message: String(msg || 'placed').slice(0, 200) };
+  const betId = obj.params?.short_bet_id ?? obj.params?.bet_id ?? null;
+  const confirmed = /\bconfirmed\b/i.test(msg) || betId !== null || obj.success === true;
+  if (confirmed && (Number.isNaN(code) || (code >= 200 && code < 300))) {
+    return {
+      status: 'placed',
+      message: short(msg || 'placed'),
+      betId: obj.params?.short_bet_id ?? null,
+      betIdLong: obj.params?.bet_id ?? null,
+      possibleWin: money(/possible win\s*ksh\s*([\d,]+(?:\.\d+)?)/i, msg),
+      confirmedStake: money(/from\s*ksh\s*([\d,]+(?:\.\d+)?)\s*stake/i, msg),
+      balanceAfter: money(/balance\s*ksh\s*([\d,]+(?:\.\d+)?)/i, msg),
+    };
   }
-  return { status: 'unknown', message: text.slice(0, 200) };
+  return { status: 'unknown', message: short(text) };
 }
 
 export class BetikaClient {
@@ -241,6 +262,9 @@ export class BetikaClient {
     let body;
     try { body = await res.json(); } catch { body = await res.text().catch(() => ''); }
     const verdict = classifyBetResponse(res.status(), body);
+    if (verdict.status === 'placed' && verdict.confirmedStake !== null && verdict.confirmedStake !== stake) {
+      verdict.stakeMismatch = true; // Betika confirmed a different stake than we typed
+    }
     return { ...verdict, odds, stake, payout, effectiveOdds, apiUrl: res.url(), response: redact(body) };
   }
 
