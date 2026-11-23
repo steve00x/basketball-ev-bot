@@ -192,6 +192,13 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
     // Every current opportunity not yet bet gets a try, not only new alerts: one skipped earlier
     // (stake too small, price moved, error) can qualify now. Already-placed bets are skipped.
     for (const o of opps) if (o.book === 'betika') results.push({ opp: o, result: await executor.execute(o) });
+    if (results.length) {
+      const count = {};
+      for (const { result: r } of results) { const k = r.status === 'skipped' ? r.reason : r.status; count[k] = (count[k] ?? 0) + 1; }
+      const already = results.filter((r) => r.result.reason === 'already_bet').map((r) => selection(r.opp));
+      log.info(`betika: ${Object.entries(count).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ')}`
+        + (already.length ? ` (already bet: ${already.slice(0, 5).join('; ')}${already.length > 5 ? '; ...' : ''})` : ''));
+    }
   }
   return { opps: fresh, results };
 }

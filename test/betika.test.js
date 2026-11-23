@@ -238,3 +238,20 @@ test('an opportunity alerted earlier but not bet is retried on later scans', asy
   const third = await run({ ...small, betikaFixedStake: 40 });
   assert.ok(third.results.every((r) => r.result.reason === 'already_bet')); // never twice
 });
+
+test('each scan logs a betting summary, including bets already placed', async () => {
+  const store = new Store(':memory:');
+  const feed = new DemoBetikaFeed();
+  const placer = new DemoBetikaPlacer(feed);
+  placer.placeBet = async (b) => ({ status: 'placed', odds: 2.6, confirmedStake: b.stake });
+  const s = makeSettings({ betikaEnabled: true, betikaLive: true, betikaFixedStake: 40 });
+  const lines = [];
+  const log = { info: (m) => lines.push(m), warn() {}, error() {} };
+  const run = () => runCycle({ events: loadDemoEvents(), s, store, notifier: new Notifier(s, { quiet: true }), betika: feed,
+    executor: new BetikaExecutor(s, placer, store, { log: quiet }), log });
+  await run();
+  assert.ok(lines.some((m) => /^betika: 2 placed$/.test(m)), lines.join('\n'));
+  lines.length = 0;
+  await run();
+  assert.ok(lines.some((m) => /^betika: 2 already bet \(already bet: .*Los Angeles Lakers/.test(m)), lines.join('\n'));
+});
