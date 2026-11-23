@@ -52,6 +52,7 @@ export const DEFAULTS = Object.freeze({
   betikaHeadless: true,
   betikaMinStake: 10,
   betikaMaxStake: 500,
+  betikaFixedStake: 0, // >0: bet exactly this much every time
   betikaDailyStakeLimit: 2000,
   betikaMaxBetsPerDay: 10,
   betikaSelectors: '',
@@ -99,6 +100,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     betikaHeadless: bool('BETIKA_HEADLESS', d.betikaHeadless),
     betikaMinStake: num('BETIKA_MIN_STAKE', d.betikaMinStake),
     betikaMaxStake: num('BETIKA_MAX_STAKE', d.betikaMaxStake),
+    betikaFixedStake: num('BETIKA_FIXED_STAKE', d.betikaFixedStake),
     betikaDailyStakeLimit: num('BETIKA_DAILY_STAKE_LIMIT', d.betikaDailyStakeLimit),
     betikaMaxBetsPerDay: num('BETIKA_MAX_BETS_PER_DAY', d.betikaMaxBetsPerDay),
     betikaSelectors: str('BETIKA_SELECTORS', ''),

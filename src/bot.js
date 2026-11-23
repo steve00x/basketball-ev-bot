@@ -172,6 +172,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   }
   const scanSettings = { ...s, targetBooks: bookPlan(s).scanTargets };
   const opps = scanEvents(events, scanSettings);
+  if (s.betikaFixedStake > 0) for (const o of opps) if (o.book === 'betika') o.stake = s.betikaFixedStake; // alerts show the real stake
   const fresh = opps.filter((o) => store.shouldAlert(dedupeKey(o), o.ev, s.realertEvDelta));
   log.info(`found ${opps.length} +EV bets (${fresh.length} new)`);
   if (!opps.length) {

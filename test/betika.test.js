@@ -194,3 +194,14 @@ test('NCAAB and EuroLeague name styles (Betika short vs Odds API long)', () => {
     assert.ok(teamSimilarity(a, b) < 0.75, `${a} vs ${b}: ${teamSimilarity(a, b)}`);
   }
 });
+
+test('BETIKA_FIXED_STAKE: every bet is the same stake, small edges included', async () => {
+  const s = makeSettings({ betikaLive: true, betikaFixedStake: 40, betikaMaxStake: 10, betikaDailyStakeLimit: 100 });
+  const sent = [];
+  const client = { async placeBet(b) { sent.push(b.stake); return { status: 'placed', odds: 2.7, confirmedStake: b.stake }; } };
+  const ex = new BetikaExecutor(s, client, new Store(':memory:'), { log: quiet });
+  await ex.execute(fakeOpp({ eventId: 1, stake: 2.86 })); // Kelly said 2.86: would have been skipped
+  await ex.execute(fakeOpp({ eventId: 2, stake: 300 }));  // Kelly said 300: not capped at 10
+  assert.deepEqual(sent, [40, 40]);
+  assert.equal((await ex.execute(fakeOpp({ eventId: 3 }))).reason, 'daily_stake_limit'); // 80 + 40 > 100
+});

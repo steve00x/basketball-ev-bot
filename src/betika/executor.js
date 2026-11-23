@@ -27,7 +27,10 @@ export class BetikaExecutor {
   }
 
   async execute(opp) {
-    const stake = Math.floor(Math.min(opp.stake, this.s.betikaMaxStake));
+    // BETIKA_FIXED_STAKE: same stake on every bet (ignores the Kelly size and BETIKA_MAX_STAKE).
+    const stake = this.s.betikaFixedStake > 0
+      ? Math.floor(this.s.betikaFixedStake)
+      : Math.floor(Math.min(opp.stake, this.s.betikaMaxStake));
     const skip = this.check(opp, stake);
     if (skip) {
       if (skip !== 'not_betika') this.log.info?.(`betika: skip ${selection(opp)} (${skip})`);
