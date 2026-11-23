@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachBetikaOdds } from './betika/odds.js';
+import { SPORTS, resolveSportKeys, sportGroup } from './sports.js';
 import { OddsAPIError } from './oddsApi.js';
 import { dedupeKey, matchup, scanEvents, selection } from './scanner.js';
 
@@ -64,20 +65,55 @@ export function bookPlan(s) {
   return { apiBooks: s.targetBooks.length ? [...s.sharpBooks, ...s.targetBooks] : null, scanTargets: targets };
 }
 
+/**
+ * Odds API sport keys to scan. SPORTS may hold groups ("soccer", "tennis", "icehockey", ...)
+ * or exact keys ("soccer_epl"); groups expand to whatever is in season, via the free
+ * /v4/sports call (cached for 6 hours).
+ */
+const sportsCache = { at: 0, list: null };
+export async function resolveKeys(api, s, log = console) {
+  const needsList = s.sports.some((e) => SPORTS[e.toLowerCase()] || ['soccer', 'soccer_all'].includes(e.toLowerCase()));
+  if (!needsList) return s.sports;
+  if (!sportsCache.list || Date.now() - sportsCache.at > 6 * 3600_000) {
+    try {
+      sportsCache.list = await api.getSports();
+      sportsCache.at = Date.now();
+    } catch (e) {
+      log.error(`could not list Odds API sports: ${e.message}`);
+      return s.sports.filter((e) => !SPORTS[e.toLowerCase()]);
+    }
+  }
+  const { keys, missing } = resolveSportKeys(s.sports, sportsCache.list);
+  if (missing.length) log.info(`no Pinnacle-priced events on The Odds API right now for: ${missing.join(', ')}`);
+  return keys;
+}
+
+/** Markets worth paying for on a key: the ones Betika has a comparable market for. */
+export const marketsFor = (key, s) => {
+  const spec = SPORTS[sportGroup(key) ?? ''];
+  return spec ? s.markets.filter((m) => spec.oddsMarkets.includes(m)) : s.markets;
+};
+
 export async function fetchEvents(api, s, log = console) {
   const { apiBooks } = bookPlan(s);
   const now = new Date();
   const horizon = new Date(+now + s.maxHoursToStart * 3600_000);
   const all = [];
-  for (const sport of s.sports) {
+  const keys = await resolveKeys(api, s, log);
+  const cost = keys.reduce((n, k) => n + marketsFor(k, s).length, 0);
+  log.info(`scanning ${keys.length} leagues: ${keys.join(', ')} (~${cost} credits per scan)`);
+  for (const sport of keys) {
+    const markets = marketsFor(sport, s);
+    if (!markets.length) continue;
     let events;
     try {
-      events = await api.getOdds(sport, s.markets, s.regions, apiBooks);
+      events = await api.getOdds(sport, markets, s.regions, apiBooks);
     } catch (e) {
       if (!(e instanceof OddsAPIError)) throw e;
       log.error(`${sport}: ${e.message}`);
       continue;
     }
+    events = events.filter((ev) => new Date(ev.commence_time) <= horizon);
     log.info(`${sport}: ${events.length} events (credits remaining: ${api.requestsRemaining})`);
     if (s.propMarkets.length) {
       for (const ev of events) {
@@ -105,9 +141,10 @@ export async function fetchEvents(api, s, log = console) {
 export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console }) {
   if (betika) {
     try {
-      const matches = await betika.basketball();
+      const groups = [...new Set(events.map((e) => sportGroup(e.sport_key ?? '') ?? 'basketball'))];
+      const matches = betika.allMatches ? await betika.allMatches(groups, log) : await betika.basketball();
       const r = attachBetikaOdds(events, matches);
-      log.info(`betika: ${r.matches} basketball matches, ${r.matched} matched to ${events.length} sharp events`);
+      log.info(`betika: ${r.matches} matches (${groups.join(', ')}), ${r.matched} matched to ${events.length} sharp events`);
       if (r.unmatched.length) log.info(`betika: unmatched: ${r.unmatched.join('; ')}`);
     } catch (e) {
       log.error(`betika: could not read odds: ${e.message}`);

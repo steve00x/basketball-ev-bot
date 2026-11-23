@@ -47,6 +47,11 @@ export class OddsAPI {
     return bookmakers?.length ? { bookmakers: bookmakers.join(',') } : { regions: regions.join(',') };
   }
 
+  /** Every sport The Odds API lists (in-season ones have active: true). Costs no credits. */
+  getSports() {
+    return this.get('/sports');
+  }
+
   getOdds(sport, markets, regions, bookmakers) {
     return this.get(`/sports/${sport}/odds`, {
       markets: markets.join(','), oddsFormat: 'decimal', dateFormat: 'iso',

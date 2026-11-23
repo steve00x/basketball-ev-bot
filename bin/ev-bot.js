@@ -4,7 +4,8 @@ import { parseArgs } from 'node:util';
 import { BetikaAPI } from '../src/betika/api.js';
 import { BetikaClient } from '../src/betika/client.js';
 import { BetikaExecutor } from '../src/betika/executor.js';
-import { DemoBetikaFeed, DemoBetikaPlacer, fetchEvents, loadDemoEvents, runCycle } from '../src/bot.js';
+import { DemoBetikaFeed, DemoBetikaPlacer, fetchEvents, loadDemoEvents, marketsFor, resolveKeys, runCycle } from '../src/bot.js';
+import { SPORTS, sportGroup } from '../src/sports.js';
 import { settingsFromEnv } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
@@ -15,7 +16,8 @@ const HELP = `Usage: ev-bot <command> [options]
 Commands:
   scan        find +EV bets and bet on Betika if BETIKA_ENABLED=true      [default]
   check       real-site self-test: fills a Betika bet slip (never places it)
-  odds        print Betika's upcoming basketball odds (winner + totals, incl. OT)
+  sports      which of your SPORTS have Pinnacle prices now, Betika counts, credit cost
+  odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
   balance     print the Betika account balance
   discover    visible browser that records Betika API calls to ./discover/
@@ -108,16 +110,40 @@ async function withBrowser(fn, overrides) {
 }
 
 const fmtMatch = (m) => `${m.start.toISOString().slice(0, 16).replace('T', ' ')}Z  ${m.competition.padEnd(22)} `
-  + `${`${m.home} v ${m.away}`.padEnd(44)} winner ${m.winner ? m.winner.map((o) => o.toFixed(2)).join(' / ') : '-'}`
+  + `${`${m.home} v ${m.away}`.padEnd(44)} winner ${m.winner ? (m.draw ? [m.winner[0], m.draw, m.winner[1]] : m.winner).map((o) => o.toFixed(2)).join(' / ') : '-'}`
   + `   totals ${m.totals.length ? `${m.totals[0].point}-${m.totals.at(-1).point} (${m.totals.length} lines)` : '-'}`;
 
 const commands = {
   scan,
 
+  sports: async () => {
+    let api;
+    try { api = new OddsAPI(s.apiKey); } catch (e) { log.error(e.message); return 1; }
+    const keys = await resolveKeys(api, s, log);
+    const groups = [...new Set(keys.map((k) => sportGroup(k)).filter(Boolean))];
+    const betika = new BetikaAPI();
+    console.log(`SPORTS=${s.sports.join(',')}\n`);
+    for (const g of Object.keys(SPORTS)) {
+      const mine = keys.filter((k) => sportGroup(k) === g);
+      const wanted = s.sports.some((e) => e.toLowerCase() === g || e.toLowerCase().startsWith(g) || sportGroup(e.toLowerCase()) === g);
+      if (!wanted && !mine.length) continue;
+      const n = groups.includes(g) ? (await betika.matches(g).catch(() => [])).length : '-';
+      console.log(`${SPORTS[g].title.padEnd(13)} Odds API leagues: ${mine.length ? mine.join(', ') : 'none in season / not covered'}`);
+      console.log(`${''.padEnd(13)} Betika matches: ${n}   credits per scan: ${mine.reduce((t, k) => t + marketsFor(k, s).length, 0)}`);
+    }
+    const cost = keys.reduce((t, k) => t + marketsFor(k, s).length, 0);
+    const perDay = Math.round(cost * 86400 / s.pollSeconds);
+    console.log(`\nTotal: ~${cost} credits per scan, ~${perDay}/day at POLL_SECONDS=${s.pollSeconds}`
+      + ` (credits remaining: ${api.requestsRemaining ?? 'unknown'})`);
+    return 0;
+  },
+
   odds: async () => {
-    const matches = await new BetikaAPI().basketball();
+    const sport = (positionals[1] ?? 'basketball').toLowerCase();
+    if (!SPORTS[sport]) { log.error(`unknown sport "${sport}" - use one of: ${Object.keys(SPORTS).join(', ')}`); return 1; }
+    const matches = await new BetikaAPI().matches(sport);
     for (const m of matches.sort((a, b) => a.start - b.start)) console.log(fmtMatch(m));
-    log.info(`${matches.length} matches, ${matches.filter((m) => m.winner).length} with a winner (incl. OT) price`);
+    log.info(`${matches.length} ${sport} matches, ${matches.filter((m) => m.winner).length} with a "${SPORTS[sport].h2h.title}" price`);
     return matches.length ? 0 : 1;
   },
 

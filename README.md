@@ -71,6 +71,35 @@ node bin/ev-bot.js scan         # keep scanning every POLL_SECONDS
 
 Every attempt is logged to `ev-bot-store.json`.
 
+## Sports
+
+Every Betika market below was checked on the live site. It's compared only with a Pinnacle
+line that settles the same way.
+
+| Sport | Betika market used | Notes |
+|---|---|---|
+| Basketball | Winner (incl. OT), Total (incl. OT) | NBA, NCAAB, EuroLeague |
+| Soccer | 1X2 (with draw), Total | both are 90 minutes, like Pinnacle |
+| Ice hockey | Winner (incl. overtime and penalties) | Betika's hockey 1X2/Total are regulation-only, so not used |
+| Tennis, table tennis, volleyball, boxing | Winner | |
+| Cricket | Winner (incl. super over) | limited overs; Test matches (with draw) never pair |
+| Handball, rugby | 1X2 (with draw) | pairs only with a 3-way Pinnacle line |
+| Baseball | (none comparable) | Betika has only a 9-inning 1X2 with draw; Pinnacle's moneyline includes extra innings |
+
+A Betika line is only compared with a Pinnacle line that has exactly the same outcomes, so a
+3-way market can never be compared with a 2-way one. Women's, youth and reserve teams
+("(W)", "U21", "Jong", " B") never match first teams.
+
+**The Odds API decides what's possible.** It covers far fewer events than Betika (no Challengers,
+UTR, KHL, Indian domestic cricket, and maybe no handball, volleyball or table tennis at all). Run:
+
+```bash
+node bin/ev-bot.js sports
+```
+
+It lists, per sport, the leagues The Odds API has in season, how many Betika matches exist, and the
+credits per scan. Sports it doesn't cover are reported and skipped.
+
 ## Key settings (`.env`)
 
 `MIN_EV` (after tax) · `BETIKA_WINNINGS_TAX` (0.20) · `BANKROLL` (KES) · `KELLY_FRACTION` · `BETIKA_MAX_STAKE` ·

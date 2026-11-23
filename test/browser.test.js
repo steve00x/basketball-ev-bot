@@ -64,6 +64,14 @@ test('totals pick and 1X2 is never confused with the winner market', async () =>
   assert.equal(winner2.odds, 2.32); // not the 1X2 price 2.42
 });
 
+test('3-way markets: the Draw button (X) on a 1x2 market', async () => {
+  go('');
+  const r = await client.placeBet({ ...PICK, market: '1x2', label: 'X', minOdds: 10, stake: 20 });
+  assert.deepEqual([r.status, r.odds], ['dry_run', 17]);
+  const slip = await client.page.$eval('#slips .stacked .stacked__market', (n) => n.textContent);
+  assert.match(slip, /1X2/);
+});
+
 test('refusals: price moved, payout after tax too low, missing outcome, not logged in', async () => {
   go('');
   assert.equal((await client.placeBet({ ...PICK, minOdds: 1.7, stake: 100 })).status, 'price_moved');

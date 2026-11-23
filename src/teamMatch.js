@@ -47,13 +47,25 @@ export function normaliseTeam(name) {
   return ALIASES[base] ?? base;
 }
 
+/** Women's / youth / reserve markers. Two names must carry the same ones to match. */
+export function qualifiers(name) {
+  const s = ` ${String(name).toLowerCase().replace(/[^a-z0-9()]+/g, ' ')} `;
+  const q = new Set();
+  if (/\b(women|womens|ladies|female)\b|\(w\)| w /.test(s)) q.add('women');
+  for (const m of s.matchAll(/\bu ?(\d{2})\b/g)) q.add(`u${m[1]}`);
+  if (/\b(reserves?|ii|iii|youth|academy|juniors?|jong)\b/.test(s) || /\s[bc]\s$/.test(s)) q.add('reserve'); // "Jong Ajax", "Barcelona B"
+  return [...q].sort().join(',');
+}
+
 /** 1 = identical, 0.9 = one name contains the other's words, else Jaccard overlap. */
 export function teamSimilarity(a, b) {
+  if (qualifiers(a) !== qualifiers(b)) return 0; // "Arsenal" is never "Arsenal (W)" or "Arsenal U21"
   const na = normaliseTeam(a), nb = normaliseTeam(b);
   if (!na || !nb) return 0;
   if (na === nb) return 1;
   const ta = new Set(na.split(' ')), tb = new Set(nb.split(' '));
   const inter = [...ta].filter((t) => tb.has(t)).length;
+  if (inter === ta.size && inter === tb.size) return 1; // same words, any order: "Alcaraz, Carlos"
   if (inter === Math.min(ta.size, tb.size)) return 0.9;
   return inter / new Set([...ta, ...tb]).size;
 }
