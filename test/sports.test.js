@@ -31,7 +31,8 @@ const S = makeSettings({ targetBooks: ['betika'], minEv: 0.02, maxLineAgeSeconds
 test('sport groups and Odds API key expansion', () => {
   assert.equal(sportGroup('soccer_epl'), 'soccer');
   assert.equal(sportGroup('tennis_atp_paris'), 'tennis');
-  assert.equal(sportGroup('rugbyleague_nrl'), 'rugby');
+  assert.equal(sportGroup('rugbyleague_nrl'), null); // league is 2-way: never pairs with Betika's 1X2
+  assert.equal(sportGroup('rugbyunion_six_nations'), 'rugby');
   assert.equal(sportGroup('icehockey_nhl'), 'icehockey');
   const active = [{ key: 'soccer_epl' }, { key: 'soccer_brazil_campeonato' }, { key: 'icehockey_nhl' },
     { key: 'tennis_atp_finals' }, { key: 'soccer_epl_winner', has_outrights: true }, { key: 'basketball_nba' }];
