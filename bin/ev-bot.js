@@ -9,7 +9,7 @@ import { SPORTS, sportGroup } from '../src/sports.js';
 import { settingsFromEnv } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
-import { Store } from '../src/store.js';
+import { Store, acquireLock } from '../src/store.js';
 
 const HELP = `Usage: ev-bot <command> [options]
 
@@ -76,7 +76,10 @@ async function scan() {
     if (e instanceof OddsAPIError) { log.error(e.message); return 1; }
     throw e;
   }
-  const store = new Store(s.storePath);
+  let release;
+  try { release = acquireLock(s.storePath); } catch (e) { log.error(e.message); return 1; }
+  process.on('exit', release);
+  const store = new Store(s.storePath, { log });
   let feed = null, client = null, executor = null;
   if (s.betikaEnabled) {
     feed = new BetikaAPI();
@@ -100,6 +103,7 @@ async function scan() {
     }
   } finally {
     await client?.close();
+    release();
   }
   return 0;
 }
