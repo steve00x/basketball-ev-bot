@@ -1,0 +1,35 @@
+{
+  "_comment": "Checked against www.betika.com on 2026-11-23, except where a key name starts with 'unverified_'. Those only show when logged in and are optional.",
+  "urls": {
+    "home": "https://www.betika.com/en-ke/",
+    "login": "https://www.betika.com/en-ke/login",
+    "match": "https://www.betika.com/en-ke/m/{parentMatchId}"
+  },
+  "appReady": ".main-betslip",
+  "login": {
+    "phone": "input[name=phone-number]",
+    "password": "input[name=password]",
+    "remember": ".session__form__remember",
+    "submit": "button.session__form__button.login",
+    "loggedOutMarker": "a.top-session-button[href*='/login']"
+  },
+  "match": {
+    "market": ".market",
+    "marketTitle": ".market__title",
+    "outcome": ".market__odds button.odd",
+    "outcomeLabel": ".text-left",
+    "outcomeOdds": ".odd__value"
+  },
+  "betslip": {
+    "selection": "#slips .stacked",
+    "selectionMarket": ".stacked__market",
+    "selectionOdds": ".stacked__odd__value",
+    "removeAll": ".main-betslip__header__keep button",
+    "stake": ".betslip__details input[name=amount]",
+    "place": "button.betslip__details__button__place",
+    "finalPayout": ".betslip__details__row.finalpay .betslip__details__row__value"
+  },
+  "clearSlipConfirm": "clear the betslip",
+  "betApi": "api\\.betika\\.com/.*bet",
+  "unverified_balance": ".account__balance, .topnav__balance, .balance"
+}

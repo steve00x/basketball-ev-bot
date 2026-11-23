@@ -1,0 +1,60 @@
+[
+  {
+    "id": "demo-evt-1",
+    "sport_key": "basketball_nba",
+    "sport_title": "NBA",
+    "commence_time": "2026-11-24T00:30:00Z",
+    "home_team": "Los Angeles Lakers",
+    "away_team": "Boston Celtics",
+    "bookmakers": [
+      {"key": "pinnacle", "title": "Pinnacle", "last_update": "2026-11-23T15:00:00Z", "markets": [
+        {"key": "h2h", "outcomes": [{"name": "Los Angeles Lakers", "price": 2.10}, {"name": "Boston Celtics", "price": 1.787}]},
+        {"key": "spreads", "outcomes": [{"name": "Los Angeles Lakers", "price": 1.952, "point": 2.5}, {"name": "Boston Celtics", "price": 1.952, "point": -2.5}]},
+        {"key": "totals", "outcomes": [{"name": "Over", "price": 1.917, "point": 228.5}, {"name": "Under", "price": 1.99, "point": 228.5}]},
+        {"key": "player_points", "outcomes": [
+          {"name": "Over", "description": "LeBron James", "price": 1.87, "point": 25.5},
+          {"name": "Under", "description": "LeBron James", "price": 1.98, "point": 25.5},
+          {"name": "Over", "description": "Jayson Tatum", "price": 1.93, "point": 27.5},
+          {"name": "Under", "description": "Jayson Tatum", "price": 1.93, "point": 27.5}]}
+      ]},
+      {"key": "draftkings", "title": "DraftKings", "last_update": "2026-11-23T15:00:00Z", "markets": [
+        {"key": "h2h", "outcomes": [{"name": "Los Angeles Lakers", "price": 2.05}, {"name": "Boston Celtics", "price": 1.77}]},
+        {"key": "spreads", "outcomes": [{"name": "Los Angeles Lakers", "price": 2.08, "point": 2.5}, {"name": "Boston Celtics", "price": 1.80, "point": -2.5}]},
+        {"key": "totals", "outcomes": [{"name": "Over", "price": 1.91, "point": 228.5}, {"name": "Under", "price": 1.91, "point": 228.5}]},
+        {"key": "player_points", "outcomes": [
+          {"name": "Over", "description": "LeBron James", "price": 1.77, "point": 25.5},
+          {"name": "Under", "description": "LeBron James", "price": 2.15, "point": 25.5},
+          {"name": "Over", "description": "Jayson Tatum", "price": 1.87, "point": 27.5},
+          {"name": "Under", "description": "Jayson Tatum", "price": 1.95, "point": 27.5}]}
+      ]},
+      {"key": "fanduel", "title": "FanDuel", "last_update": "2026-11-23T15:00:00Z", "markets": [
+        {"key": "h2h", "outcomes": [{"name": "Los Angeles Lakers", "price": 2.25}, {"name": "Boston Celtics", "price": 1.67}]},
+        {"key": "totals", "outcomes": [{"name": "Over", "price": 1.87, "point": 228.5}, {"name": "Under", "price": 1.95, "point": 228.5}]}
+      ]},
+      {"key": "betmgm", "title": "BetMGM", "last_update": "2026-11-23T15:00:00Z", "markets": [
+        {"key": "spreads", "outcomes": [{"name": "Los Angeles Lakers", "price": 1.80, "point": 3.5}, {"name": "Boston Celtics", "price": 2.20, "point": -3.5}]}
+      ]}
+    ]
+  },
+  {
+    "id": "demo-evt-2",
+    "sport_key": "basketball_nba",
+    "sport_title": "NBA",
+    "commence_time": "2026-11-24T01:00:00Z",
+    "home_team": "New York Knicks",
+    "away_team": "Denver Nuggets",
+    "bookmakers": [
+      {"key": "pinnacle", "title": "Pinnacle", "last_update": "2026-11-23T15:00:00Z", "markets": [
+        {"key": "h2h", "outcomes": [{"name": "New York Knicks", "price": 1.645}, {"name": "Denver Nuggets", "price": 2.38}]},
+        {"key": "totals", "outcomes": [{"name": "Over", "price": 1.952, "point": 221.5}, {"name": "Under", "price": 1.952, "point": 221.5}]}
+      ]},
+      {"key": "betmgm", "title": "BetMGM", "last_update": "2026-11-23T15:00:00Z", "markets": [
+        {"key": "h2h", "outcomes": [{"name": "New York Knicks", "price": 1.57}, {"name": "Denver Nuggets", "price": 2.55}]},
+        {"key": "totals", "outcomes": [{"name": "Over", "price": 1.91, "point": 221.5}, {"name": "Under", "price": 1.91, "point": 221.5}]}
+      ]},
+      {"key": "draftkings", "title": "DraftKings", "last_update": "2026-11-23T15:00:00Z", "markets": [
+        {"key": "h2h", "outcomes": [{"name": "New York Knicks", "price": 1.62}, {"name": "Denver Nuggets", "price": 2.40}]}
+      ]}
+    ]
+  }
+]

@@ -1,0 +1,72 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mock Betika match page</title></head>
+<body>
+<!-- Class names and structure copied from www.betika.com/en-ke/m/{id} (2026-11-23), logic faked. -->
+<a class="top-session-button button" id="loginlink" href="/en-ke/login?next=%2F">Login</a>
+<div class="markets">
+  <div class="market"><div class="market__title"><span><span>1x2</span></span></div>
+    <div multi="3" class="market__odds">
+      <button class="odd"><span class="text-left">1 </span> <span class="odd__value">1.70</span></button>
+      <button class="odd"><span class="text-left">x </span> <span class="odd__value">17.00</span></button>
+      <button class="odd"><span class="text-left">2 </span> <span class="odd__value">2.42</span></button></div></div>
+  <div class="market"><div class="market__title"><span><span style="margin-right: 5px;">Winner (Incl. Overtime)</span></span></div>
+    <div multi="2" class="market__odds">
+      <button class="odd" data-name="Philadelphia"><span class="text-left">1 
+  </span> <span class="odd__value">1.64</span></button>
+      <button class="odd" data-name="Portland"><span class="text-left">2 
+  </span> <span class="odd__value">2.32</span></button></div></div>
+  <div class="market"><div class="market__title"><span><span>Total (Incl. Overtime)</span></span></div>
+    <div multi="1" class="market__odds">
+      <button class="odd" data-name="over 228.5"><span class="text-left">Over 228.5 </span> <span class="odd__value">1.70</span></button>
+      <button class="odd" data-name="under 228.5"><span class="text-left">Under 228.5 </span> <span class="odd__value">2.22</span></button></div></div>
+</div>
+<div class="main-betslip">
+  <div class="main-betslip__header"><div class="main-betslip__header__keep"><button class="button icon no-bg"><span class="button__title">Remove All</span></button></div></div>
+  <div id="slips" class="betslip"><div class="betslip-content"></div></div>
+  <div class="betslip__details">
+    <div class="betslip__details__row finalpay"><span class="betslip__details__row__label">Final Payout</span> <span class="betslip__details__row__value">KES0</span></div>
+    <input name="amount" type="number" min="1" step="1" max="500000" placeholder="Enter stake" class="input" value="">
+    <button class="betslip__details__button__place" amount="100" totalodds="1">Place Bet KES100</button>
+  </div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const TAX = Number(q.get('tax') ?? 0.2);
+  if (q.get('loggedin')) document.getElementById('loginlink').remove();
+  const content = document.querySelector('.betslip-content');
+  const input = document.querySelector('input[name=amount]');
+  const place = document.querySelector('.betslip__details__button__place');
+  const payout = document.querySelector('.finalpay .betslip__details__row__value');
+  let pick = null;
+  function render() {
+    const amount = Number(input.value || 100);
+    const odds = pick ? pick.odds : 1;
+    place.setAttribute('amount', String(amount));
+    place.setAttribute('totalodds', odds.toFixed(2));
+    const win = amount * odds;
+    payout.textContent = 'KES' + (win - TAX * (win - amount)).toFixed(2);
+  }
+  document.querySelectorAll('.market').forEach((m) => m.querySelectorAll('button.odd').forEach((b) => b.addEventListener('click', () => {
+    pick = { odds: parseFloat(b.querySelector('.odd__value').textContent), market: m.querySelector('.market__title').textContent.trim().toUpperCase(), name: b.dataset.name };
+    content.insertAdjacentHTML('beforeend', `<div class="rounded-card"><div class="stacked"><div class="stacked__details">
+      <div class="stacked__row stacked__market"><span>${pick.market}</span> • <span class="stacked__market--odd">${pick.name}</span></div></div>
+      <div class="stacked__odd"><span class="stacked__odd__value bold">${pick.odds.toFixed(2)}</span></div></div></div>`);
+    render();
+  })));
+  document.querySelector('.main-betslip__header__keep button').addEventListener('click', () => {
+    // like the real site: a native confirm that blocks the page until answered
+    if (!confirm('Are you sure you want to clear the betslip?')) return;
+    content.innerHTML = ''; pick = null; render();
+  });
+  if (q.get('alert')) setTimeout(() => alert('Some other popup'), 50);
+  input.addEventListener('input', render);
+  if (q.get('preselected')) content.innerHTML = '<div class="rounded-card"><div class="stacked">old</div></div>';
+  window.posted = [];
+  place.addEventListener('click', async () => {
+    const body = { stake: input.value, odds: pick?.odds, token: 'secret-token' };
+    window.posted.push(body);
+    await fetch(`/v2/bet?mode=${q.get('mode') ?? 'ok'}`, { method: 'POST', body: JSON.stringify(body) }).catch(() => {});
+  });
+  render();
+</script>
+</body></html>

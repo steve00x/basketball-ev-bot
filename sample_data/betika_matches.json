@@ -1,0 +1,10 @@
+[
+  { "parentMatchId": "90000001", "matchId": "1", "home": "LA Lakers", "away": "Boston", "competition": "NBA", "category": "USA",
+    "winner": [2.62, 1.52],
+    "totals": [ { "point": 227.5, "over": 1.80, "under": 2.02 }, { "point": 228.5, "over": 1.86, "under": 2.40 }, { "point": 229.5, "over": 1.93, "under": 1.89 } ] },
+  { "parentMatchId": "90000002", "matchId": "2", "home": "New York", "away": "Denver", "competition": "NBA", "category": "USA",
+    "winner": [1.55, 2.60],
+    "totals": [ { "point": 221.5, "over": 1.90, "under": 1.90 } ] },
+  { "parentMatchId": "90000003", "matchId": "3", "home": "Charlotte", "away": "Memphis", "competition": "NCAA, Regular Season", "category": "USA",
+    "winner": [1.9, 1.9], "totals": [] }
+]

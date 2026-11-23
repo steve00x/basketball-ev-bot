@@ -1,0 +1,360 @@
+{
+ "data": [
+  {
+   "home_team": "Philadelphia",
+   "game_id": "63591",
+   "match_id": "11406798",
+   "away_team": "Portland",
+   "start_time": "2026-11-24 03:00:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719748",
+   "side_bets": "40",
+   "home_odd": "1.70",
+   "neutral_odd": "17.00",
+   "away_odd": "2.42",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "219",
+     "name": "WINNER (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "1",
+       "odd_key": "Philadelphia",
+       "odd_def": "{$competitor1}",
+       "odd_value": "1.64",
+       "special_bet_value": "",
+       "outcome_id": "4",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      },
+      {
+       "display": "2",
+       "odd_key": "Portland",
+       "odd_def": "{$competitor2}",
+       "odd_value": "2.32",
+       "special_bet_value": "",
+       "outcome_id": "5",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Charlotte",
+   "game_id": "26951",
+   "match_id": "11406789",
+   "away_team": "Memphis",
+   "start_time": "2026-11-24 03:00:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719746",
+   "side_bets": "40",
+   "home_odd": "2.36",
+   "neutral_odd": "17.00",
+   "away_odd": "1.73",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "219",
+     "name": "WINNER (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "1",
+       "odd_key": "Charlotte",
+       "odd_def": "{$competitor1}",
+       "odd_value": "2.27",
+       "special_bet_value": "",
+       "outcome_id": "4",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      },
+      {
+       "display": "2",
+       "odd_key": "Memphis",
+       "odd_def": "{$competitor2}",
+       "odd_value": "1.67",
+       "special_bet_value": "",
+       "outcome_id": "5",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Minnesota",
+   "game_id": "84937",
+   "match_id": "11406814",
+   "away_team": "Brooklyn",
+   "start_time": "2026-11-24 03:30:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719754",
+   "side_bets": "39",
+   "home_odd": "1.19",
+   "neutral_odd": "19.00",
+   "away_odd": "5.80",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "219",
+     "name": "WINNER (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "1",
+       "odd_key": "Minnesota",
+       "odd_def": "{$competitor1}",
+       "odd_value": "1.16",
+       "special_bet_value": "",
+       "outcome_id": "4",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      },
+      {
+       "display": "2",
+       "odd_key": "Brooklyn",
+       "odd_def": "{$competitor2}",
+       "odd_value": "5.60",
+       "special_bet_value": "",
+       "outcome_id": "5",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Toronto",
+   "game_id": "42620",
+   "match_id": "11406802",
+   "away_team": "Milwaukee",
+   "start_time": "2026-11-24 03:30:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719752",
+   "side_bets": "39",
+   "home_odd": "1.25",
+   "neutral_odd": "18.00",
+   "away_odd": "4.80",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "219",
+     "name": "WINNER (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "1",
+       "odd_key": "Toronto",
+       "odd_def": "{$competitor1}",
+       "odd_value": "1.23",
+       "special_bet_value": "",
+       "outcome_id": "4",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      },
+      {
+       "display": "2",
+       "odd_key": "Milwaukee",
+       "odd_def": "{$competitor2}",
+       "odd_value": "4.50",
+       "special_bet_value": "",
+       "outcome_id": "5",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Appalachian State",
+   "game_id": "89526",
+   "match_id": "11745575",
+   "away_team": "St Bonaventure",
+   "start_time": "2026-11-23 19:00:00",
+   "competition_name": "NCAA, Regular Season",
+   "category": "USA",
+   "parent_match_id": "75111940",
+   "side_bets": "17",
+   "home_odd": "2.85",
+   "neutral_odd": "11.00",
+   "away_odd": "1.60",
+   "competition_id": "40102",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "219",
+     "name": "WINNER (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "1",
+       "odd_key": "Appalachian State",
+       "odd_def": "{$competitor1}",
+       "odd_value": "2.60",
+       "special_bet_value": "",
+       "outcome_id": "4",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      },
+      {
+       "display": "2",
+       "odd_key": "St Bonaventure",
+       "odd_def": "{$competitor2}",
+       "odd_value": "1.50",
+       "special_bet_value": "",
+       "outcome_id": "5",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Davidson",
+   "game_id": "74930",
+   "match_id": "11495958",
+   "away_team": "Iowa",
+   "start_time": "2026-11-23 19:00:00",
+   "competition_name": "NCAA, Regular Season",
+   "category": "USA",
+   "parent_match_id": "74067514",
+   "side_bets": "17",
+   "home_odd": "1.47",
+   "neutral_odd": "12.00",
+   "away_odd": "3.25",
+   "competition_id": "40102",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "219",
+     "name": "WINNER (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "1",
+       "odd_key": "Davidson",
+       "odd_def": "{$competitor1}",
+       "odd_value": "1.39",
+       "special_bet_value": "",
+       "outcome_id": "4",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      },
+      {
+       "display": "2",
+       "odd_key": "Iowa",
+       "odd_def": "{$competitor2}",
+       "odd_value": "3.00",
+       "special_bet_value": "",
+       "outcome_id": "5",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Bnot Petah Tikva",
+   "game_id": "32634",
+   "match_id": "12137078",
+   "away_team": "Hapoel Lev Jerusalem",
+   "start_time": "2026-11-23 19:00:00",
+   "competition_name": "WBL, Women",
+   "category": "Israel",
+   "parent_match_id": "74980612",
+   "side_bets": "5",
+   "home_odd": "4.70",
+   "neutral_odd": "18.00",
+   "away_odd": "1.18",
+   "competition_id": "43527",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "219",
+     "name": "WINNER (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "1",
+       "odd_key": "Bnot Petah Tikva",
+       "odd_def": "{$competitor1}",
+       "odd_value": "4.50",
+       "special_bet_value": "",
+       "outcome_id": "4",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      },
+      {
+       "display": "2",
+       "odd_key": "Hapoel Lev Jerusalem",
+       "odd_def": "{$competitor2}",
+       "odd_value": "1.16",
+       "special_bet_value": "",
+       "outcome_id": "5",
+       "parsed_special_bet_value": {
+        "": ""
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "meta": {
+  "total": "7",
+  "limit": "100",
+  "current_page": 1
+ },
+ "time_elapsed_secs": 0.022813796997070312
+}

@@ -1,0 +1,75 @@
+// Decides whether an opportunity may be bet on, places it on Betika and records the result.
+import { beforeTax, minAcceptableOdds } from '../oddsMath.js';
+import { dedupeKey, matchup, selection } from '../scanner.js';
+import { betikaPick } from './odds.js';
+
+// Statuses that may have taken money: these count toward the daily limits.
+const LIVE_STATUSES = new Set(['placed', 'unknown']);
+
+export class BetikaExecutor {
+  constructor(settings, client, store, { log = console, notify = async () => {} } = {}) {
+    Object.assign(this, { s: settings, client, store, log, notify });
+    this.halted = false;
+    this.consecutiveErrors = 0;
+  }
+
+  /** Returns a reason string if the bet must be skipped, else null. */
+  check(opp, stake) {
+    if (this.halted) return 'halted';
+    if (opp.book !== 'betika') return 'not_betika';
+    if (!opp.betikaRef || !betikaPick(opp)) return 'unsupported_market';
+    if (this.store.hasBet(dedupeKey(opp))) return 'already_bet';
+    if (stake < this.s.betikaMinStake) return 'stake_too_small';
+    const today = this.store.liveBetsToday(LIVE_STATUSES);
+    if (today.length >= this.s.betikaMaxBetsPerDay) return 'daily_bet_limit';
+    if (today.reduce((a, b) => a + b.stake, 0) + stake > this.s.betikaDailyStakeLimit) return 'daily_stake_limit';
+    return null;
+  }
+
+  async execute(opp) {
+    const stake = Math.floor(Math.min(opp.stake, this.s.betikaMaxStake));
+    const skip = this.check(opp, stake);
+    if (skip) {
+      if (skip !== 'not_betika') this.log.info?.(`betika: skip ${selection(opp)} (${skip})`);
+      return { status: 'skipped', reason: skip };
+    }
+    // Lowest after-tax price that still clears MIN_EV, and the posted price that gives it.
+    const minEffective = minAcceptableOdds(opp.fairProb, this.s.minEv);
+    const minOdds = Math.max(beforeTax(minEffective, opp.winningsTax ?? 0), this.s.minDecimalOdds);
+    const round3 = (x) => Math.ceil(x * 1000) / 1000;
+    const bet = {
+      parentMatchId: opp.betikaRef.parentMatchId, ...betikaPick(opp),
+      minOdds: round3(minOdds), minEffectiveOdds: round3(minEffective),
+      stake, live: this.s.betikaLive,
+    };
+
+    let result;
+    try {
+      result = await this.client.placeBet(bet);
+      this.consecutiveErrors = 0;
+    } catch (e) {
+      result = { status: 'error', message: e.message };
+      if (++this.consecutiveErrors >= 3) this.halt('3 consecutive errors - check selectors / login');
+    }
+
+    this.store.recordBet({
+      key: dedupeKey(opp), at: new Date().toISOString(), matchup: matchup(opp),
+      selection: selection(opp), stake, minOdds: bet.minOdds, expectedOdds: opp.decimal,
+      fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...result,
+    });
+
+    const msg = `Betika ${result.status.toUpperCase()}: ${selection(opp)} (${matchup(opp)}) `
+      + `stake KES ${stake} @ ${result.odds ?? '?'} (min ${bet.minOdds})${result.message ? ` - ${result.message}` : ''}`;
+    this.log.info?.(msg);
+    if (result.status !== 'dry_run' || this.s.betikaLive) await this.notify(msg);
+    // An unconfirmed click may have placed the bet: stop and let a human check.
+    if (result.status === 'unknown') this.halt('bet confirmation not seen - check your Betika bet history');
+    return result;
+  }
+
+  halt(reason) {
+    this.halted = true;
+    this.log.error?.(`betika: HALTED - ${reason}`);
+    this.notify(`Betika bot halted: ${reason}`).catch(() => {});
+  }
+}

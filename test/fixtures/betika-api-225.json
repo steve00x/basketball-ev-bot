@@ -1,0 +1,1108 @@
+{
+ "data": [
+  {
+   "home_team": "Philadelphia",
+   "game_id": "63591",
+   "match_id": "11406798",
+   "away_team": "Portland",
+   "start_time": "2026-11-24 03:00:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719748",
+   "side_bets": "40",
+   "home_odd": "1.70",
+   "neutral_odd": "17.00",
+   "away_odd": "2.42",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "225",
+     "name": "TOTAL (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "OVER 228.5",
+       "odd_key": "over 228.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.70",
+       "special_bet_value": "total=228.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "228.5"
+       }
+      },
+      {
+       "display": "OVER 229.5",
+       "odd_key": "over 229.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.76",
+       "special_bet_value": "total=229.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "229.5"
+       }
+      },
+      {
+       "display": "OVER 230.5",
+       "odd_key": "over 230.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.84",
+       "special_bet_value": "total=230.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "230.5"
+       }
+      },
+      {
+       "display": "OVER 231.5",
+       "odd_key": "over 231.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.92",
+       "special_bet_value": "total=231.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "231.5"
+       }
+      },
+      {
+       "display": "OVER 232.5",
+       "odd_key": "over 232.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.01",
+       "special_bet_value": "total=232.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "232.5"
+       }
+      },
+      {
+       "display": "OVER 233.5",
+       "odd_key": "over 233.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.10",
+       "special_bet_value": "total=233.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "233.5"
+       }
+      },
+      {
+       "display": "OVER 234.5",
+       "odd_key": "over 234.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.21",
+       "special_bet_value": "total=234.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "234.5"
+       }
+      },
+      {
+       "display": "UNDER 228.5",
+       "odd_key": "under 228.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.22",
+       "special_bet_value": "total=228.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "228.5"
+       }
+      },
+      {
+       "display": "UNDER 229.5",
+       "odd_key": "under 229.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.11",
+       "special_bet_value": "total=229.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "229.5"
+       }
+      },
+      {
+       "display": "UNDER 230.5",
+       "odd_key": "under 230.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.02",
+       "special_bet_value": "total=230.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "230.5"
+       }
+      },
+      {
+       "display": "UNDER 231.5",
+       "odd_key": "under 231.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.93",
+       "special_bet_value": "total=231.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "231.5"
+       }
+      },
+      {
+       "display": "UNDER 232.5",
+       "odd_key": "under 232.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.85",
+       "special_bet_value": "total=232.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "232.5"
+       }
+      },
+      {
+       "display": "UNDER 233.5",
+       "odd_key": "under 233.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.77",
+       "special_bet_value": "total=233.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "233.5"
+       }
+      },
+      {
+       "display": "UNDER 234.5",
+       "odd_key": "under 234.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.70",
+       "special_bet_value": "total=234.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "234.5"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Charlotte",
+   "game_id": "26951",
+   "match_id": "11406789",
+   "away_team": "Memphis",
+   "start_time": "2026-11-24 03:00:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719746",
+   "side_bets": "40",
+   "home_odd": "2.36",
+   "neutral_odd": "17.00",
+   "away_odd": "1.73",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "225",
+     "name": "TOTAL (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "OVER 212.5",
+       "odd_key": "over 212.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.69",
+       "special_bet_value": "total=212.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "212.5"
+       }
+      },
+      {
+       "display": "OVER 213.5",
+       "odd_key": "over 213.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.76",
+       "special_bet_value": "total=213.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "213.5"
+       }
+      },
+      {
+       "display": "OVER 214.5",
+       "odd_key": "over 214.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.84",
+       "special_bet_value": "total=214.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "214.5"
+       }
+      },
+      {
+       "display": "OVER 215.5",
+       "odd_key": "over 215.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.92",
+       "special_bet_value": "total=215.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "215.5"
+       }
+      },
+      {
+       "display": "OVER 216.5",
+       "odd_key": "over 216.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.01",
+       "special_bet_value": "total=216.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "216.5"
+       }
+      },
+      {
+       "display": "OVER 217.5",
+       "odd_key": "over 217.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.10",
+       "special_bet_value": "total=217.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "217.5"
+       }
+      },
+      {
+       "display": "OVER 218.5",
+       "odd_key": "over 218.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.21",
+       "special_bet_value": "total=218.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "218.5"
+       }
+      },
+      {
+       "display": "UNDER 212.5",
+       "odd_key": "under 212.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.22",
+       "special_bet_value": "total=212.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "212.5"
+       }
+      },
+      {
+       "display": "UNDER 213.5",
+       "odd_key": "under 213.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.11",
+       "special_bet_value": "total=213.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "213.5"
+       }
+      },
+      {
+       "display": "UNDER 214.5",
+       "odd_key": "under 214.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.02",
+       "special_bet_value": "total=214.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "214.5"
+       }
+      },
+      {
+       "display": "UNDER 215.5",
+       "odd_key": "under 215.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.93",
+       "special_bet_value": "total=215.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "215.5"
+       }
+      },
+      {
+       "display": "UNDER 216.5",
+       "odd_key": "under 216.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.85",
+       "special_bet_value": "total=216.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "216.5"
+       }
+      },
+      {
+       "display": "UNDER 217.5",
+       "odd_key": "under 217.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.77",
+       "special_bet_value": "total=217.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "217.5"
+       }
+      },
+      {
+       "display": "UNDER 218.5",
+       "odd_key": "under 218.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.70",
+       "special_bet_value": "total=218.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "218.5"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Minnesota",
+   "game_id": "84937",
+   "match_id": "11406814",
+   "away_team": "Brooklyn",
+   "start_time": "2026-11-24 03:30:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719754",
+   "side_bets": "39",
+   "home_odd": "1.19",
+   "neutral_odd": "19.00",
+   "away_odd": "5.80",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "225",
+     "name": "TOTAL (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "OVER 221.5",
+       "odd_key": "over 221.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.71",
+       "special_bet_value": "total=221.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "221.5"
+       }
+      },
+      {
+       "display": "OVER 222.5",
+       "odd_key": "over 222.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.78",
+       "special_bet_value": "total=222.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "222.5"
+       }
+      },
+      {
+       "display": "OVER 223.5",
+       "odd_key": "over 223.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.86",
+       "special_bet_value": "total=223.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "223.5"
+       }
+      },
+      {
+       "display": "OVER 224.5",
+       "odd_key": "over 224.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.94",
+       "special_bet_value": "total=224.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "224.5"
+       }
+      },
+      {
+       "display": "OVER 225.5",
+       "odd_key": "over 225.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.03",
+       "special_bet_value": "total=225.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "225.5"
+       }
+      },
+      {
+       "display": "OVER 226.5",
+       "odd_key": "over 226.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.13",
+       "special_bet_value": "total=226.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "226.5"
+       }
+      },
+      {
+       "display": "OVER 227.5",
+       "odd_key": "over 227.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.24",
+       "special_bet_value": "total=227.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "227.5"
+       }
+      },
+      {
+       "display": "UNDER 221.5",
+       "odd_key": "under 221.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.19",
+       "special_bet_value": "total=221.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "221.5"
+       }
+      },
+      {
+       "display": "UNDER 222.5",
+       "odd_key": "under 222.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.09",
+       "special_bet_value": "total=222.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "222.5"
+       }
+      },
+      {
+       "display": "UNDER 223.5",
+       "odd_key": "under 223.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.99",
+       "special_bet_value": "total=223.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "223.5"
+       }
+      },
+      {
+       "display": "UNDER 224.5",
+       "odd_key": "under 224.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.91",
+       "special_bet_value": "total=224.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "224.5"
+       }
+      },
+      {
+       "display": "UNDER 225.5",
+       "odd_key": "under 225.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.83",
+       "special_bet_value": "total=225.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "225.5"
+       }
+      },
+      {
+       "display": "UNDER 226.5",
+       "odd_key": "under 226.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.75",
+       "special_bet_value": "total=226.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "226.5"
+       }
+      },
+      {
+       "display": "UNDER 227.5",
+       "odd_key": "under 227.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.69",
+       "special_bet_value": "total=227.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "227.5"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Toronto",
+   "game_id": "42620",
+   "match_id": "11406802",
+   "away_team": "Milwaukee",
+   "start_time": "2026-11-24 03:30:00",
+   "competition_name": "NBA",
+   "category": "USA",
+   "parent_match_id": "73719752",
+   "side_bets": "39",
+   "home_odd": "1.25",
+   "neutral_odd": "18.00",
+   "away_odd": "4.80",
+   "competition_id": "9207",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "225",
+     "name": "TOTAL (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "OVER 219.5",
+       "odd_key": "over 219.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.67",
+       "special_bet_value": "total=219.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "219.5"
+       }
+      },
+      {
+       "display": "OVER 220.5",
+       "odd_key": "over 220.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.74",
+       "special_bet_value": "total=220.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "220.5"
+       }
+      },
+      {
+       "display": "OVER 221.5",
+       "odd_key": "over 221.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.81",
+       "special_bet_value": "total=221.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "221.5"
+       }
+      },
+      {
+       "display": "OVER 222.5",
+       "odd_key": "over 222.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.89",
+       "special_bet_value": "total=222.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "222.5"
+       }
+      },
+      {
+       "display": "OVER 223.5",
+       "odd_key": "over 223.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.97",
+       "special_bet_value": "total=223.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "223.5"
+       }
+      },
+      {
+       "display": "OVER 224.5",
+       "odd_key": "over 224.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.07",
+       "special_bet_value": "total=224.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "224.5"
+       }
+      },
+      {
+       "display": "OVER 225.5",
+       "odd_key": "over 225.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.17",
+       "special_bet_value": "total=225.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "225.5"
+       }
+      },
+      {
+       "display": "UNDER 219.5",
+       "odd_key": "under 219.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.26",
+       "special_bet_value": "total=219.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "219.5"
+       }
+      },
+      {
+       "display": "UNDER 220.5",
+       "odd_key": "under 220.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.15",
+       "special_bet_value": "total=220.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "220.5"
+       }
+      },
+      {
+       "display": "UNDER 221.5",
+       "odd_key": "under 221.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.05",
+       "special_bet_value": "total=221.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "221.5"
+       }
+      },
+      {
+       "display": "UNDER 222.5",
+       "odd_key": "under 222.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.96",
+       "special_bet_value": "total=222.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "222.5"
+       }
+      },
+      {
+       "display": "UNDER 223.5",
+       "odd_key": "under 223.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.87",
+       "special_bet_value": "total=223.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "223.5"
+       }
+      },
+      {
+       "display": "UNDER 224.5",
+       "odd_key": "under 224.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.80",
+       "special_bet_value": "total=224.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "224.5"
+       }
+      },
+      {
+       "display": "UNDER 225.5",
+       "odd_key": "under 225.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.73",
+       "special_bet_value": "total=225.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "225.5"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Appalachian State",
+   "game_id": "89526",
+   "match_id": "11745575",
+   "away_team": "St Bonaventure",
+   "start_time": "2026-11-23 19:00:00",
+   "competition_name": "NCAA, Regular Season",
+   "category": "USA",
+   "parent_match_id": "75111940",
+   "side_bets": "17",
+   "home_odd": "2.85",
+   "neutral_odd": "11.00",
+   "away_odd": "1.60",
+   "competition_id": "40102",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "225",
+     "name": "TOTAL (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "OVER 134.5",
+       "odd_key": "over 134.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.72",
+       "special_bet_value": "total=134.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "134.5"
+       }
+      },
+      {
+       "display": "OVER 135.5",
+       "odd_key": "over 135.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.80",
+       "special_bet_value": "total=135.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "135.5"
+       }
+      },
+      {
+       "display": "OVER 136.5",
+       "odd_key": "over 136.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.88",
+       "special_bet_value": "total=136.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "136.5"
+       }
+      },
+      {
+       "display": "OVER 137.5",
+       "odd_key": "over 137.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.97",
+       "special_bet_value": "total=137.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "137.5"
+       }
+      },
+      {
+       "display": "OVER 138.5",
+       "odd_key": "over 138.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.07",
+       "special_bet_value": "total=138.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "138.5"
+       }
+      },
+      {
+       "display": "UNDER 134.5",
+       "odd_key": "under 134.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.13",
+       "special_bet_value": "total=134.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "134.5"
+       }
+      },
+      {
+       "display": "UNDER 135.5",
+       "odd_key": "under 135.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.03",
+       "special_bet_value": "total=135.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "135.5"
+       }
+      },
+      {
+       "display": "UNDER 136.5",
+       "odd_key": "under 136.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.93",
+       "special_bet_value": "total=136.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "136.5"
+       }
+      },
+      {
+       "display": "UNDER 137.5",
+       "odd_key": "under 137.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.84",
+       "special_bet_value": "total=137.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "137.5"
+       }
+      },
+      {
+       "display": "UNDER 138.5",
+       "odd_key": "under 138.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.76",
+       "special_bet_value": "total=138.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "138.5"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Davidson",
+   "game_id": "74930",
+   "match_id": "11495958",
+   "away_team": "Iowa",
+   "start_time": "2026-11-23 19:00:00",
+   "competition_name": "NCAA, Regular Season",
+   "category": "USA",
+   "parent_match_id": "74067514",
+   "side_bets": "17",
+   "home_odd": "1.47",
+   "neutral_odd": "12.00",
+   "away_odd": "3.25",
+   "competition_id": "40102",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "225",
+     "name": "TOTAL (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "OVER 142.5",
+       "odd_key": "over 142.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.72",
+       "special_bet_value": "total=142.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "142.5"
+       }
+      },
+      {
+       "display": "OVER 143.5",
+       "odd_key": "over 143.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.80",
+       "special_bet_value": "total=143.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "143.5"
+       }
+      },
+      {
+       "display": "OVER 144.5",
+       "odd_key": "over 144.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.88",
+       "special_bet_value": "total=144.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "144.5"
+       }
+      },
+      {
+       "display": "OVER 145.5",
+       "odd_key": "over 145.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.97",
+       "special_bet_value": "total=145.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "145.5"
+       }
+      },
+      {
+       "display": "OVER 146.5",
+       "odd_key": "over 146.5",
+       "odd_def": "over {total}",
+       "odd_value": "2.07",
+       "special_bet_value": "total=146.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "146.5"
+       }
+      },
+      {
+       "display": "UNDER 142.5",
+       "odd_key": "under 142.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.13",
+       "special_bet_value": "total=142.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "142.5"
+       }
+      },
+      {
+       "display": "UNDER 143.5",
+       "odd_key": "under 143.5",
+       "odd_def": "under {total}",
+       "odd_value": "2.03",
+       "special_bet_value": "total=143.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "143.5"
+       }
+      },
+      {
+       "display": "UNDER 144.5",
+       "odd_key": "under 144.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.93",
+       "special_bet_value": "total=144.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "144.5"
+       }
+      },
+      {
+       "display": "UNDER 145.5",
+       "odd_key": "under 145.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.85",
+       "special_bet_value": "total=145.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "145.5"
+       }
+      },
+      {
+       "display": "UNDER 146.5",
+       "odd_key": "under 146.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.77",
+       "special_bet_value": "total=146.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "146.5"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "home_team": "Bnot Petah Tikva",
+   "game_id": "32634",
+   "match_id": "12137078",
+   "away_team": "Hapoel Lev Jerusalem",
+   "start_time": "2026-11-23 19:00:00",
+   "competition_name": "WBL, Women",
+   "category": "Israel",
+   "parent_match_id": "74980612",
+   "side_bets": "5",
+   "home_odd": "4.70",
+   "neutral_odd": "18.00",
+   "away_odd": "1.18",
+   "competition_id": "43527",
+   "sport_id": "30",
+   "sport_name": "Basketball",
+   "is_esport": false,
+   "is_srl": false,
+   "provider": "sr",
+   "odds": [
+    {
+     "sub_type_id": "225",
+     "name": "TOTAL (INCL. OVERTIME)",
+     "odds": [
+      {
+       "display": "OVER 140.5",
+       "odd_key": "over 140.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.78",
+       "special_bet_value": "total=140.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "140.5"
+       }
+      },
+      {
+       "display": "OVER 141.5",
+       "odd_key": "over 141.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.87",
+       "special_bet_value": "total=141.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "141.5"
+       }
+      },
+      {
+       "display": "OVER 142.5",
+       "odd_key": "over 142.5",
+       "odd_def": "over {total}",
+       "odd_value": "1.96",
+       "special_bet_value": "total=142.5",
+       "outcome_id": "12",
+       "parsed_special_bet_value": {
+        "total": "142.5"
+       }
+      },
+      {
+       "display": "UNDER 140.5",
+       "odd_key": "under 140.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.89",
+       "special_bet_value": "total=140.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "140.5"
+       }
+      },
+      {
+       "display": "UNDER 141.5",
+       "odd_key": "under 141.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.80",
+       "special_bet_value": "total=141.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "141.5"
+       }
+      },
+      {
+       "display": "UNDER 142.5",
+       "odd_key": "under 142.5",
+       "odd_def": "under {total}",
+       "odd_value": "1.72",
+       "special_bet_value": "total=142.5",
+       "outcome_id": "13",
+       "parsed_special_bet_value": {
+        "total": "142.5"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "meta": {
+  "total": "7",
+  "limit": "100",
+  "current_page": 1
+ },
+ "time_elapsed_secs": 0.028429031372070312
+}

@@ -1,0 +1,5 @@
+node_modules/
+.env
+.betika-session/
+ev-bot-store.json*
+discover/

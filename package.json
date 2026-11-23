@@ -1,0 +1,16 @@
+{
+  "name": "basketball-ev-bot",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Basketball +EV finder: Pinnacle fair odds via The Odds API, auto-bets on Betika with Puppeteer",
+  "type": "module",
+  "bin": { "ev-bot": "bin/ev-bot.js" },
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node bin/ev-bot.js scan",
+    "demo": "node bin/ev-bot.js scan --demo",
+    "test": "node --test test/*.test.js",
+    "check": "node bin/ev-bot.js check"
+  },
+  "dependencies": { "puppeteer": "25.18.1" }
+}
