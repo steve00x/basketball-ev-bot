@@ -166,3 +166,13 @@ test('executor halts when Betika confirms a different stake; logs ticket and bal
   await ex2.execute(fakeOpp({ eventId: 'b', stake: 20 }));
   assert.equal(ex2.halted, true);
 });
+
+test('unmatched reasons: missing game vs. similar names', () => {
+  const at = new Date(Date.now() + 3600e3);
+  const ev = (home, away) => ({ id: home, sport_key: 'basketball_nba', home_team: home, away_team: away, commence_time: at.toISOString(), bookmakers: [] });
+  const betika = [{ parentMatchId: 'c', home: 'Chicago', away: 'Cleveland', competition: 'NBA', start: at, winner: [2, 2], totals: [] },
+    { parentMatchId: 'h', home: 'Houston', away: 'LAC Clips', competition: 'NBA', start: at, winner: [2, 2], totals: [] }];
+  const r = attachBetikaOdds([ev('Sacramento Kings', 'San Antonio Spurs'), ev('Houston Rockets', 'Los Angeles Clippers')], betika);
+  assert.equal(r.unmatched[0], 'San Antonio Spurs @ Sacramento Kings (not on Betika yet)');
+  assert.match(r.unmatched[1], /names did not match - Betika has "Houston v LAC Clips"/);
+});

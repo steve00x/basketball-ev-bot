@@ -1,6 +1,6 @@
 // Attach Betika prices to Odds API events as a "betika" bookmaker.
 import { COMPETITIONS } from './api.js';
-import { findRow } from '../teamMatch.js';
+import { findRow, teamSimilarity } from '../teamMatch.js';
 
 const MAX_START_DIFF_MS = 90 * 60_000;
 
@@ -21,8 +21,13 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
       && Math.abs(m.start - start) <= MAX_START_DIFF_MS);
     const hit = findRow(ev, candidates);
     if (!hit) {
-      const notListed = !matches.some((m) => inComp(m.competition) && Math.abs(m.start - start) <= MAX_START_DIFF_MS);
-      unmatched.push(`${ev.away_team} @ ${ev.home_team}${notListed ? ' (not on Betika yet)' : ' (names did not match)'}`);
+      // Only blame the names if some Betika game at that time shares a team with this one.
+      const score = (m) => Math.max(
+        teamSimilarity(ev.home_team, m.home), teamSimilarity(ev.home_team, m.away),
+        teamSimilarity(ev.away_team, m.home), teamSimilarity(ev.away_team, m.away));
+      const near = candidates.map((m) => ({ m, s: score(m) })).sort((a, b) => b.s - a.s)[0];
+      unmatched.push(`${ev.away_team} @ ${ev.home_team}`
+        + (near && near.s >= 0.5 ? ` (names did not match - Betika has "${near.m.home} v ${near.m.away}")` : ' (not on Betika yet)'));
       continue;
     }
     const m = hit.row;
