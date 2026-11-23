@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachBetikaOdds } from './betika/odds.js';
 import { OddsAPIError } from './oddsApi.js';
-import { dedupeKey, scanEvents } from './scanner.js';
+import { dedupeKey, matchup, scanEvents, selection } from './scanner.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SAMPLE_EVENTS = path.join(ROOT, 'sample_data', 'nba_odds.json');
@@ -108,6 +108,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
       const matches = await betika.basketball();
       const r = attachBetikaOdds(events, matches);
       log.info(`betika: ${r.matches} basketball matches, ${r.matched} matched to ${events.length} sharp events`);
+      if (r.unmatched.length) log.info(`betika: unmatched: ${r.unmatched.join('; ')}`);
     } catch (e) {
       log.error(`betika: could not read odds: ${e.message}`);
     }
@@ -116,6 +117,14 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   const opps = scanEvents(events, scanSettings);
   const fresh = opps.filter((o) => store.shouldAlert(dedupeKey(o), o.ev, s.realertEvDelta));
   log.info(`found ${opps.length} +EV bets (${fresh.length} new)`);
+  if (!opps.length) {
+    // Show the closest call so you can see prices really are being compared.
+    const [best] = scanEvents(events, { ...scanSettings, minEv: -1 });
+    if (best) {
+      log.info(`closest: ${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal} = `
+        + `${(best.ev * 100).toFixed(1)}% EV after tax vs fair ${(1 / best.fairProb).toFixed(2)} (need +${(s.minEv * 100).toFixed(1)}%)`);
+    }
+  }
   await notifier.sendOpportunities(fresh);
   for (const o of fresh) store.recordAlert(dedupeKey(o), o.ev);
 

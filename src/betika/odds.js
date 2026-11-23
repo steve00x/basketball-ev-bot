@@ -12,6 +12,7 @@ const MAX_START_DIFF_MS = 90 * 60_000;
  */
 export function attachBetikaOdds(events, matches, now = new Date()) {
   const used = new Set();
+  const unmatched = [];
   let matched = 0;
   for (const ev of events) {
     const inComp = COMPETITIONS[ev.sport_key] ?? (() => true);
@@ -19,7 +20,11 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
     const candidates = matches.filter((m) => !used.has(m) && inComp(m.competition)
       && Math.abs(m.start - start) <= MAX_START_DIFF_MS);
     const hit = findRow(ev, candidates);
-    if (!hit) continue;
+    if (!hit) {
+      const notListed = !matches.some((m) => inComp(m.competition) && Math.abs(m.start - start) <= MAX_START_DIFF_MS);
+      unmatched.push(`${ev.away_team} @ ${ev.home_team}${notListed ? ' (not on Betika yet)' : ' (names did not match)'}`);
+      continue;
+    }
     const m = hit.row;
     used.add(m);
     matched++;
@@ -40,7 +45,7 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
     ev.bookmakers = (ev.bookmakers ?? []).filter((b) => b.key !== 'betika');
     if (markets.length) ev.bookmakers.push({ key: 'betika', title: 'Betika', last_update: ts, markets });
   }
-  return { matched, matches: matches.length };
+  return { matched, matches: matches.length, unmatched };
 }
 
 /**
