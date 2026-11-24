@@ -45,6 +45,25 @@ export class Store {
     }
   }
 
+  /**
+   * Re-read the file if another process (a running scan) has written it since we last looked.
+   * Read-only use (the standalone dashboard): a half-written or locked file is skipped and the
+   * last good copy kept. Returns true when new data was loaded.
+   */
+  reload() {
+    if (this.path === ':memory:') return false;
+    try {
+      const mtime = this.fs.statSync(this.path).mtimeMs;
+      if (mtime === this.loadedMtime) return false;
+      const data = JSON.parse(this.fs.readFileSync(this.path, 'utf8'));
+      this.data = { alerts: {}, bets: [], ...data };
+      this.loadedMtime = mtime;
+      return true;
+    } catch {
+      return false; // missing, mid-write or locked: try again on the next refresh
+    }
+  }
+
   shouldAlert(key, ev, delta) {
     const prev = this.data.alerts[key];
     return prev === undefined || ev >= prev + delta;

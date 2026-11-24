@@ -67,9 +67,11 @@ export function summarizeOpps(opps) {
   }));
 }
 
-export function startDashboard({ store, s, port = 3000, log = console, state = botState }) {
+/** reload: re-read the bet log on each request (for the standalone dashboard next to a scan in another window). */
+export function startDashboard({ store, s, port = 3000, log = console, state = botState, reload = false }) {
   const server = http.createServer((req, res) => {
     if (req.url === '/api/state') {
+      if (reload) store.reload();
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
       return res.end(JSON.stringify(dashboardData(store, s, state)));
     }

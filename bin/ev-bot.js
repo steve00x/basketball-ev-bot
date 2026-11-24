@@ -325,8 +325,8 @@ const commands = {
     const store = new Store(s.storePath, { log });
     Object.assign(botState.mode, { betikaLive: s.betikaLive, liveBetting: s.liveBetting, liveBetsLive: s.liveBetsLive,
       minEv: s.minEv, tax: s.winningsTax.betika });
-    startDashboard({ store, s, port: s.dashboardPort, log });
-    log.info('showing the saved bet log only (no scanning) - press Ctrl+C to stop');
+    startDashboard({ store, s, port: s.dashboardPort, log, reload: true });
+    log.info('showing the saved bet log (no scanning here); it updates as a scan in another window saves bets - press Ctrl+C to stop');
     await new Promise(() => {});
   },
 

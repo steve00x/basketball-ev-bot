@@ -44,3 +44,27 @@ test('only one bot at a time', () => {
   assert.equal(fs.existsSync(`${file}.lock`), false);
   release();
 });
+
+test('reload: a second reader picks up what a running scan saves, and keeps the last good copy on a bad read', async () => {
+  const { mkdtempSync, writeFileSync, utimesSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const path = join(mkdtempSync(join(tmpdir(), 'evstore-')), 'store.json');
+  const quiet = { error() {} };
+  const scan = new Store(path, { log: quiet });
+  scan.data.bets.push({ key: 'a', status: 'placed' });
+  scan.save();
+  const view = new Store(path, { log: quiet });
+  assert.equal(view.data.bets.length, 1);
+  assert.equal(view.reload(), true);  // first look records the file's time
+  assert.equal(view.reload(), false); // unchanged: no re-read
+  scan.data.bets.push({ key: 'b', status: 'placed' });
+  scan.save();
+  utimesSync(path, new Date(), new Date(Date.now() + 5000)); // make sure the time moves on fast disks
+  assert.equal(view.reload(), true);
+  assert.deepEqual(view.data.bets.map((b) => b.key), ['a', 'b']);
+  writeFileSync(path, '{"bets": [ {"key"'); // caught mid-write
+  utimesSync(path, new Date(), new Date(Date.now() + 10000));
+  assert.equal(view.reload(), false);
+  assert.equal(view.data.bets.length, 2);
+});
