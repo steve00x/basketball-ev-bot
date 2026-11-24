@@ -335,6 +335,7 @@ export class BetikaClient {
         this.lastHistoryCalls.push(`${res.request().method()} ${res.status()} ${u.host}${u.pathname}`);
         // account/feature/IP services are not bet data (and may hold personal details): never read
         if (/^(userinfo|ip|ke-experiment-service)\./.test(host)) return;
+        if (replaying && /\/uo\/bethistory/.test(res.url())) return;
         const ct = res.headers()['content-type'] ?? '';
         if (ct.includes('json')) bodies.push(await res.json());
         // remember the page's own history request so later pages can be asked for the same way
@@ -348,6 +349,7 @@ export class BetikaClient {
       } catch { /* body gone after navigation */ }
     };
     let historyRequest = null;
+    let replaying = false;
     page.on('response', onResponse);
     try {
       // My Bets has no bet slip panel, so don't wait for the usual page-ready marker: load it and
@@ -356,34 +358,29 @@ export class BetikaClient {
         .catch((e) => { if (!/ERR_ABORTED|detached/i.test(e.message)) throw e; });
       await sleep(waitMs * 1.5);
       if (/\/login/.test(page.url())) throw new Error('Betika sent My Bets to the login page - run `node bin/ev-bot.js login` again');
-      // Open bets show first; finished ones are under another tab ("Settled", "Settled (4)", "All" ...)
-      this.lastHistoryTabs = [];
-      for (const tab of ['settled', 'all']) {
-        const clicked = await page.evaluate((t) => {
-          const re = new RegExp(`^${t}\\b`, 'i');
-          const el = [...document.querySelectorAll('button, a, li, span, div, label')]
-            .filter((e) => e.offsetParent !== null && e.children.length <= 2)
-            .find((e) => re.test(e.textContent.replace(/\s+/g, ' ').trim()) && e.textContent.trim().length < 30);
-          if (el) { el.click(); return el.textContent.replace(/\s+/g, ' ').trim(); }
-          return null;
-        }, tab);
-        if (clicked) { this.lastHistoryTabs.push(clicked); await sleep(waitMs / 2); }
-      }
-      // more pages of history (same request as the page made, next page number), up to `maxPages`
-      const last = bodies.filter((b) => Array.isArray(b?.bets)).at(-1);
-      if (historyRequest && last && last.bets.length >= Number(last.limit ?? Infinity)) {
-        let body;
-        try { body = JSON.parse(historyRequest.body ?? 'null'); } catch { body = null; }
-        for (let pg = Number(body?.page ?? last.page ?? 1) + 1; body && pg <= maxPages; pg++) {
-          const next = await page.evaluate(async (r, b) => {
-            const h = Object.fromEntries(Object.entries(r.headers).filter(([k]) => !/^(content-length|host|origin|referer|cookie)$/i.test(k)));
-            const res = await fetch(r.url, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
-            return res.ok ? res.json() : null;
-          }, historyRequest, { ...body, page: pg }).catch(() => null);
-          if (!next?.bets?.length) break;
-          bodies.push(next);
-          if (next.bets.length < Number(next.limit ?? Infinity)) break;
-        }
+      // The page asks for period "ACTIVE" (open bets). Betika's reply lists its other periods
+      // (meta.periods: { title, filter }); ask for each the same way to get settled bets too.
+      let body;
+      try { body = JSON.parse(historyRequest?.body ?? 'null'); } catch { body = null; }
+      const periods = bodies.find((b) => Array.isArray(b?.bets))?.meta?.periods ?? [];
+      this.lastHistoryPeriods = periods.map((p) => `${p.title} = ${p.filter}`);
+      if (historyRequest && body) {
+        replaying = true; // these replies are added here, not by the listener
+        try {
+          for (const p of periods) {
+            if (!p?.filter || String(p.filter) === String(body.period)) continue;
+            for (let pg = 1; pg <= maxPages; pg++) {
+              const next = await page.evaluate(async (r, b) => {
+                const h = Object.fromEntries(Object.entries(r.headers).filter(([k]) => !/^(content-length|host|origin|referer|cookie)$/i.test(k)));
+                const res = await fetch(r.url, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
+                return res.ok ? res.json() : null;
+              }, historyRequest, { ...body, period: p.filter, page: String(pg) }).catch(() => null);
+              if (!next?.bets?.length) break;
+              bodies.push(next);
+              if (next.bets.length < Number(next.limit ?? Infinity)) break;
+            }
+          }
+        } finally { replaying = false; }
       }
     } finally {
       page.off('response', onResponse);

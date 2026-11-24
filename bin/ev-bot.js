@@ -290,7 +290,7 @@ const commands = {
         const bodies = await checkBetikaHistory(c, store, log);
         const all = bodies?.length ? bodies : await c.betHistory();
         console.log(`Betika API calls made by My Bets (paths only):\n  ${[...new Set(c.lastHistoryCalls ?? [])].join('\n  ') || 'none'}`);
-        console.log(`Tabs clicked: ${(c.lastHistoryTabs ?? []).join(', ') || 'none found'}`);
+        console.log(`Periods Betika offers (all requested): ${(c.lastHistoryPeriods ?? []).join(' | ') || 'none listed'}`);
         console.log(`Filters My Bets sent (secrets removed):\n  ${(c.lastHistoryFilters ?? []).map((f) => JSON.stringify(f)).join('\n  ') || 'none'}`);
         console.log(`Status words Betika used (and how the bot reads them):\n  ${statusWords(all).join('\n  ') || 'none'}`);
         const settledHere = store.data.bets.filter((b) => ['won', 'lost', 'void'].includes(b.betikaStatus)).length;
