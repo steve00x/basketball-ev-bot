@@ -21,7 +21,11 @@ export function groupLines(marketKey, outcomes = []) {
     const desc = o.description ?? null;
     const bk = JSON.stringify([desc, bucketPoint]);
     if (!buckets.has(bk)) buckets.set(bk, { description: desc, prices: new Map() });
-    buckets.get(bk).prices.set(outcomeKey(o.name, point), { name: o.name, point, price: Number(o.price) });
+    // Keep the bookmaker's own details (e.g. Betika's team name for team totals) for the bet placer.
+    buckets.get(bk).prices.set(outcomeKey(o.name, point), {
+      name: o.name, point, price: Number(o.price),
+      ...(o.betikaTeam ? { betikaTeam: o.betikaTeam } : {}), ...(o.side ? { side: o.side } : {}), ...(o.code ? { code: o.code } : {}),
+    });
   }
   const lines = new Map();
   for (const { description, prices } of buckets.values()) {
@@ -126,6 +130,7 @@ export function scanEvent(event, s, now = new Date()) {
           commenceTime: start,
           market, description,
           outcome: o.name, point: o.point,
+          ...(o.betikaTeam ? { betikaTeam: o.betikaTeam } : {}), ...(o.code ? { code: o.code } : {}),
           book, bookTitle: title,
           decimal: o.price,
           effectiveDecimal: effective,

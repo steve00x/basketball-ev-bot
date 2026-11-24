@@ -60,7 +60,7 @@ test('odds-by-tournaments -> events: right periods, all lines, team totals, inac
   assert.deepEqual(toEvents([stale], ctx), []);
 });
 
-test('merge: same game becomes one event with The Odds API names; Pinnacle alt and team-total lines compare exactly', () => {
+test('merge: same game becomes one event with The Odds API names; Pinnacle alt and team-total lines compare exactly', async () => {
   const NOW = new Date('2026-11-24T18:00:00Z');
   const [op] = toEvents([fixture()], { ...ctx, now: NOW });
   const theOddsApi = { id: 'toa1', sport_key: 'basketball_nba', home_team: 'Chicago Bulls', away_team: 'Milwaukee Bucks',
@@ -85,6 +85,9 @@ test('merge: same game becomes one event with The Odds API names; Pinnacle alt a
   const tt = opps.find((o) => o.market === 'team_totals' && o.point === 117.5 && o.outcome === 'Over');
   assert.ok(tot && !tot.model, 'exact Pinnacle alt line, no model');
   assert.ok(tt && !tt.model && Math.abs(tt.ev - 0.05) < 1e-9, 'exact Pinnacle team total, no model');
+  // ...and it must be placeable: Betika's own team name gives the market title on the page
+  const { betikaPick } = await import('../src/betika/odds.js');
+  assert.deepEqual(betikaPick(tt), { market: 'Chicago Total (Incl. Overtime)', label: 'Over 117.5' });
   assert.equal(opps.filter((o) => o.market === 'team_totals' && o.point === 117.5 && o.outcome === 'Over').length, 1);
 });
 
@@ -133,4 +136,28 @@ test('account summary never contains the API key or email', async () => {
   const line = summarizeAccount(acc);
   assert.equal(line, 'requests used 14 of 250 | plan Free | until 2026-12-24');
   assert.ok(!/SECRET|example\.com|abc/.test(line));
+});
+
+test('exact team-total opportunity reaches the bet placer (not "unsupported_market")', async () => {
+  const { BetikaExecutor } = await import('../src/betika/executor.js');
+  const { Store } = await import('../src/store.js');
+  const sent = [];
+  const ex = new BetikaExecutor(makeSettings({ betikaLive: false, betikaFixedStake: 40 }), { placeBet: async (b) => { sent.push(b); return { status: 'dry_run' }; } },
+    new Store(':memory:'), { log: { info() {}, warn() {}, error() {} } });
+  const NOW = new Date('2026-11-24T18:00:00Z');
+  const ev = { id: 'e1', sport_key: 'basketball_ncaab', home_team: 'Marist Red Foxes', away_team: 'Siena Saints', commence_time: '2026-11-25T00:00:00Z',
+    betikaRef: { sport: 'basketball', parentMatchId: 'p9', swapped: true },
+    bookmakers: [
+      { key: 'pinnacle', last_update: NOW.toISOString(), markets: [{ key: 'team_totals', outcomes: [
+        { name: 'Over', price: 1.95, point: 64.5, description: 'Marist Red Foxes' }, { name: 'Under', price: 1.95, point: 64.5, description: 'Marist Red Foxes' }] }] },
+      { key: 'betika', last_update: NOW.toISOString(), markets: [{ key: 'team_totals', outcomes: [
+        { name: 'Over', price: 1.70, point: 64.5, description: 'Marist Red Foxes', side: 'H', betikaTeam: 'Marist' },
+        { name: 'Under', price: 2.15, point: 64.5, description: 'Marist Red Foxes', side: 'H', betikaTeam: 'Marist' }] }] }],
+  };
+  const [o] = scanEvent(ev, makeSettings({ targetBooks: ['betika'], minEv: 0.02, winningsTax: {}, maxLineAgeSeconds: 1e9, maxHoursToStart: 48 }), NOW)
+    .filter((x) => x.market === 'team_totals');
+  assert.equal(o.outcome, 'Under');
+  const r = await ex.execute(o);
+  assert.equal(r.status, 'dry_run');
+  assert.deepEqual([sent[0].market, sent[0].label, sent[0].parentMatchId], ['Marist Total (Incl. Overtime)', 'Under 64.5', 'p9']);
 });
