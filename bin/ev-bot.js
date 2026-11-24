@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { BetikaAPI } from '../src/betika/api.js';
 import { BetikaClient } from '../src/betika/client.js';
 import { BetikaExecutor } from '../src/betika/executor.js';
-import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, fetchEvents, loadDemoEvents, marketsFor, nextScanPlan, resolveKeys, runCycle } from '../src/bot.js';
+import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, fetchEvents, fetchLiveEvents, loadDemoEvents, marketsFor, nextScanPlan, resolveKeys, runCycle } from '../src/bot.js';
 import { SPORTS, sportGroup } from '../src/sports.js';
 import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
@@ -102,6 +102,7 @@ async function scan() {
   }
   log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`
     + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`
+    + ` | live betting ${s.liveBetting ? `${s.liveBetsLive && s.betikaLive ? 'REAL' : 'dry run'} (${s.liveSports.join('/')}, every ${s.livePollSeconds}s, min ${(Math.max(s.liveMinEv, s.minEv) * 100).toFixed(1)}%)` : 'off'}`
     + ` | fast scans ${s.fastScanMinutes > 0 ? `every ${Math.round(s.fastPollSeconds / 60)} min within ${s.fastScanMinutes} min of ${s.fastScanSports.join('/')} games` : 'off'}`);
   try {
     let papi = null, lastPapi = 0;
@@ -111,6 +112,7 @@ async function scan() {
     }
     const fastGroups = s.fastScanSports;
     let lastFull = 0;
+    let lastLive = 0, liveActive = false;
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
     let kind = 'full';
     while (!stopping) {
@@ -120,11 +122,17 @@ async function scan() {
           events = await fetchEvents(api, s, log);
           lastFull = Date.now();
           upcoming = events.filter((e) => fastGroups.includes(sportGroup(e.sport_key ?? ''))).map((e) => +new Date(e.commence_time));
+        } else if (kind === 'live') {
+          events = await fetchLiveEvents(api, s, log);
+          lastLive = Date.now();
+          liveActive = events.length > 0;
+          if (liveActive) await runCycle({ events, s, store, notifier, betika: feed, executor, log, live: true });
+          events = null;
         } else {
           log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
           events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
         }
-        const r = await runCycle({ events, s, store, notifier, betika: feed, executor, log });
+        const r = events ? await runCycle({ events, s, store, notifier, betika: feed, executor, log }) : { found: Infinity };
         // Second source: only when The Odds API found too few bets, and not more often than
         // ODDSPAPI_MIN_INTERVAL_MINUTES (OddsPapi's free plan is 250 requests a month).
         if (papi && kind === 'full' && r.found < s.oddsPapiWhenFewerThan && !papi.quotaGone
@@ -145,8 +153,14 @@ async function scan() {
       }
       if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
       const plan = nextScanPlan({ now: Date.now(), lastFull, s, upcoming });
+      if (s.liveBetting) {
+        // games in progress: every LIVE_POLL_SECONDS; otherwise look again every LIVE_IDLE_CHECK_SECONDS
+        const liveDue = lastLive + (liveActive ? s.livePollSeconds : s.liveIdleCheckSeconds) * 1000;
+        const liveWait = Math.max(0, liveDue - Date.now());
+        if (liveWait < plan.waitMs) Object.assign(plan, { kind: 'live', waitMs: liveWait });
+      }
       kind = plan.kind;
-      if (plan.waitMs > 0) log.info(`next ${plan.kind} scan in ${Math.round(plan.waitMs / 60_000)} min`);
+      if (plan.waitMs >= 60_000) log.info(`next ${plan.kind} scan in ${Math.round(plan.waitMs / 60_000)} min`);
       for (let t = 0; t < plan.waitMs / 1000 && !stopping; t++) await sleep(1000);
     }
   } finally {

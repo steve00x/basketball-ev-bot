@@ -3,7 +3,8 @@
   "urls": {
     "home": "https://www.betika.com/en-ke/",
     "login": "https://www.betika.com/en-ke/login",
-    "match": "https://www.betika.com/en-ke/m/{parentMatchId}"
+    "match": "https://www.betika.com/en-ke/m/{parentMatchId}",
+    "liveMatch": "https://www.betika.com/en-ke/live/m/{liveMatchId}"
   },
   "appReady": ".main-betslip",
   "login": {

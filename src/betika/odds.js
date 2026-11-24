@@ -10,12 +10,13 @@ const MAX_START_DIFF_MS = 90 * 60_000;
  * A Betika match must be the same sport, in a fitting competition (no women's/youth/
  * doubles mix-ups), start within 90 min of the sharp event, and both names must match.
  */
-export function attachBetikaOdds(events, matches, now = new Date()) {
+export function attachBetikaOdds(events, matches, now = new Date(), { live = false } = {}) {
   const used = new Set();
   const unmatched = [];
   let matched = 0;
   for (const ev of events) {
-    if (new Date(ev.commence_time) <= now) continue; // started: Betika lists it under live betting, the bot doesn't bet it
+    // Pre-game scans skip started games (they're on Betika's live page); live scans take only started ones.
+    if ((new Date(ev.commence_time) <= now) !== live) continue;
     const sport = sportGroup(ev.sport_key ?? '') ?? 'basketball';
     const inComp = competitionFilter(ev.sport_key ?? '');
     const start = new Date(ev.commence_time);
@@ -35,7 +36,8 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
     const m = hit.row;
     used.add(m);
     matched++;
-    ev.betikaRef = { sport, parentMatchId: m.parentMatchId, home: m.home, away: m.away, swapped: hit.swapped };
+    ev.betikaRef = { sport, parentMatchId: m.parentMatchId, home: m.home, away: m.away, swapped: hit.swapped,
+      ...(m.live ? { liveMatchId: m.liveMatchId, clock: m.clock, period: m.period, score: m.score } : {}) };
 
     const ts = now.toISOString();
     const markets = [];

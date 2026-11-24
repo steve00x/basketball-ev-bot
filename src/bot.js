@@ -169,14 +169,47 @@ export async function fetchEvents(api, s, log = console, opts = {}) {
   return all;
 }
 
-export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console }) {
+/**
+ * Live Pinnacle prices for games under way. The free event list says which leagues have a game
+ * in progress, so credits are only spent on those (h2h + totals; no models in play).
+ */
+export async function fetchLiveEvents(api, s, log = console) {
+  const { apiBooks } = bookPlan(s);
+  const now = Date.now();
+  const inWindow = (t) => t <= now && now - t <= s.liveMaxHoursSinceStart * 3600_000;
+  const keys = (await resolveKeys(api, s, log)).filter((k) => s.liveSports.includes(sportGroup(k)));
+  const all = [];
+  for (const key of keys) {
+    try {
+      const evs = await api.getEvents(key);
+      if (!evs.some((e) => inWindow(+new Date(e.commence_time)))) continue;
+      const markets = marketsFor(key, s).filter((m) => m === 'h2h' || m === 'totals');
+      if (!markets.length) continue;
+      const odds = await api.getOdds(key, markets, s.regions, apiBooks);
+      all.push(...odds.filter((e) => inWindow(+new Date(e.commence_time))));
+    } catch (e) {
+      if (!(e instanceof OddsAPIError)) throw e;
+      log.warn(`live ${key}: ${e.message}`);
+    }
+  }
+  if (all.length) log.info(`live: ${all.length} games in progress (credits remaining: ${api.requestsRemaining})`);
+  return all;
+}
+
+/** Settings for an in-play scan: started games, fresh Pinnacle prices, stricter edge, no models. */
+export const liveSettings = (s) => ({ ...s, inPlay: true, minEv: Math.max(s.liveMinEv, s.minEv),
+  maxLineAgeSeconds: s.liveMaxOddsAgeSeconds, altTotals: false, teamTotals: false });
+
+export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false }) {
+  if (live) s = liveSettings(s);
   if (betika) {
     try {
       const groups = [...new Set(events.map((e) => sportGroup(e.sport_key ?? '') ?? 'basketball'))];
-      const matches = betika.allMatches ? await betika.allMatches(groups, log) : await betika.basketball();
-      const r = attachBetikaOdds(events, matches);
-      log.info(`betika: ${r.matches} matches (${groups.join(', ')}), ${r.matched} matched to ${events.length} sharp events`);
-      if (r.unmatched.length) log.info(`betika: unmatched: ${r.unmatched.join('; ')}`);
+      const matches = live ? await betika.allLiveMatches(groups, log)
+        : betika.allMatches ? await betika.allMatches(groups, log) : await betika.basketball();
+      const r = attachBetikaOdds(events, matches, new Date(), { live });
+      log.info(`betika${live ? ' live' : ''}: ${r.matches} matches (${groups.join(', ')}), ${r.matched} matched to ${events.length} sharp events`);
+      if (r.unmatched.length && !live) log.info(`betika: unmatched: ${r.unmatched.join('; ')}`);
     } catch (e) {
       log.error(`betika: could not read odds: ${e.message}`);
     }
@@ -185,7 +218,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   const opps = scanEvents(events, scanSettings);
   if (s.betikaFixedStake > 0) for (const o of opps) if (o.book === 'betika') o.stake = s.betikaFixedStake; // alerts show the real stake
   const fresh = opps.filter((o) => store.shouldAlert(dedupeKey(o), o.ev, s.realertEvDelta));
-  log.info(`found ${opps.length} +EV bets (${fresh.length} new)`);
+  log.info(`found ${opps.length} +EV ${live ? 'LIVE ' : ''}bets (${fresh.length} new)`);
   if (!opps.length) {
     // Show the closest call so you can see prices really are being compared.
     const [best] = scanEvents(events, { ...scanSettings, minEv: -1 });

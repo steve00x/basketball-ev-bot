@@ -196,12 +196,14 @@ export class BetikaClient {
    *   minEffectiveOdds: lowest (Final Payout / stake) accepted, i.e. after Betika's tax deductions
    * With live=false it fills the slip and checks everything, but never clicks Place Bet.
    */
-  async placeBet({ parentMatchId, market, label, minOdds, minEffectiveOdds = 0, stake, live = false }) {
+  async placeBet({ parentMatchId, liveMatchId, market, label, minOdds, minEffectiveOdds = 0, stake, live = false }) {
     const page = await this.start();
     const B = this.sel.betslip;
+    // In-play bets go through Betika's live match page (/live/m/{live match id})
+    const matchUrl = liveMatchId ? this.sel.urls.liveMatch.replace('{liveMatchId}', liveMatchId)
+      : this.sel.urls.match.replace('{parentMatchId}', parentMatchId);
     try {
-      await this.goto(this.sel.urls.match.replace('{parentMatchId}', parentMatchId),
-        `${this.sel.appReady} , ${this.sel.match.market}`);
+      await this.goto(matchUrl, `${this.sel.appReady} , ${this.sel.match.market}`);
       await page.waitForSelector(this.sel.match.market, { timeout: 10000 });
     } catch (e) {
       return { status: 'match_unavailable', message: e.message.split('\n')[0] };
@@ -211,7 +213,7 @@ export class BetikaClient {
       if (!this.phone || !this.password) return { status: 'not_logged_in' };
       try {
         await this.ensureLoggedIn();
-        await this.goto(this.sel.urls.match.replace('{parentMatchId}', parentMatchId), this.sel.match.market);
+        await this.goto(matchUrl, this.sel.match.market);
       } catch (e) {
         return { status: 'not_logged_in', message: e.message.split('\n')[0] };
       }
@@ -265,7 +267,8 @@ export class BetikaClient {
 
     const betApi = new RegExp(this.sel.betApi, 'i');
     const responseP = page.waitForResponse(
-      (r) => r.request().method() === 'POST' && betApi.test(r.url()), { timeout: this.betResponseTimeoutMs }).catch(() => null);
+      // live bets are held by Betika for a few seconds before acceptance
+      (r) => r.request().method() === 'POST' && betApi.test(r.url()), { timeout: this.betResponseTimeoutMs * (liveMatchId ? 2 : 1) }).catch(() => null);
     await btn.evaluate((b) => b.click());
     const res = await responseP;
     if (!res) return { status: 'unknown', odds, stake, payout, message: 'no bet API response seen' };

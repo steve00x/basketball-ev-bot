@@ -38,7 +38,7 @@ before(async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
   const sel = JSON.parse(fs.readFileSync(DEFAULT_SELECTORS, 'utf8'));
-  sel.urls = { home: `${base}/`, login: `${base}/login`, match: `${base}/m/{parentMatchId}` };
+  sel.urls = { home: `${base}/`, login: `${base}/login`, match: `${base}/m/{parentMatchId}`, liveMatch: `${base}/live/m/{liveMatchId}` };
   sel.betApi = '127\\.0\\.0\\.1.*/v2/bet';
   const selectorsFile = path.join(tmp, 'selectors.json');
   fs.writeFileSync(selectorsFile, JSON.stringify(sel));
@@ -79,6 +79,13 @@ test('Double Chance X/2 and Draw No Bet 2 buttons (labels as on the real site)',
   assert.match(await client.page.$eval('#slips .stacked .stacked__market', (n) => n.textContent), /DOUBLE CHANCE/);
   const dnb = await client.placeBet({ ...PICK, market: 'Who Will Win? (If Draw, Money Back)', label: '2', minOdds: 4, stake: 20 });
   assert.deepEqual([dnb.status, dnb.odds], ['dry_run', 4.8]);
+});
+
+test('in-play bets open the live match page', async () => {
+  go('');
+  const r = await client.placeBet({ ...PICK, liveMatchId: '5402289', minOdds: 1.6, stake: 20 });
+  assert.equal(r.status, 'dry_run');
+  assert.match(client.page.url(), /\/live\/m\/5402289$/);
 });
 
 test('refusals: price moved, payout after tax too low, missing outcome, not logged in', async () => {

@@ -45,8 +45,14 @@ export function scanEvent(event, s, now = new Date()) {
   // A NaN threshold would let every price through as "+EV" (ev < NaN is always false).
   if (!Number.isFinite(s.minEv)) throw new Error(`MIN_EV is not a number (${s.minEv}) - fix it in .env`);
   const start = new Date(event.commence_time);
-  if (Number.isNaN(+start) || start <= now) return []; // pre-game only
-  if ((start - now) / 1000 > s.maxHoursToStart * 3600) return [];
+  if (Number.isNaN(+start)) return [];
+  if (s.inPlay) {
+    // live scan: only games under way (and not long finished)
+    if (start > now || (now - start) / 1000 > (s.liveMaxHoursSinceStart ?? 4) * 3600) return [];
+  } else {
+    if (start <= now) return []; // pre-game only
+    if ((start - now) / 1000 > s.maxHoursToStart * 3600) return [];
+  }
 
   const sharpSet = new Set(s.sharpBooks);
   const targetSet = new Set(s.targetBooks);
@@ -141,6 +147,7 @@ export function scanEvent(event, s, now = new Date()) {
           sharpBooks: sharps,
           lineAgeSeconds: age,
           betikaRef: event.betikaRef ?? null,
+          ...(s.inPlay ? { inPlay: true } : {}),
         });
       }
     }

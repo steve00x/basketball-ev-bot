@@ -73,6 +73,15 @@ export const DEFAULTS = Object.freeze({
   altTotalsMinEv: 0.04,
   altTotalsMaxDistance: 6,
   teamTotals: true,
+  // In-play betting (Pinnacle live prices from The Odds API vs Betika's live feed)
+  liveBetting: false,          // scan games in progress
+  liveBetsLive: false,         // place real in-play bets (dry run otherwise, even if BETIKA_LIVE=true)
+  liveSports: ['basketball', 'soccer'],
+  livePollSeconds: 45,
+  liveIdleCheckSeconds: 600,   // how often to look for games in progress when none are on
+  liveMinEv: 0.05,
+  liveMaxOddsAgeSeconds: 30,   // Pinnacle's live price must be this fresh
+  liveMaxHoursSinceStart: 4,
   // OddsPapi: second Pinnacle source, used only when The Odds API finds fewer than N +EV bets
   oddsPapiKey: '',
   oddsPapiWhenFewerThan: 3,
@@ -140,6 +149,14 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     altTotalsMinEv: num('ALT_TOTALS_MIN_EV', d.altTotalsMinEv),
     altTotalsMaxDistance: num('ALT_TOTALS_MAX_DISTANCE', d.altTotalsMaxDistance),
     teamTotals: bool('TEAM_TOTALS', d.teamTotals),
+    liveBetting: bool('LIVE_BETTING', d.liveBetting),
+    liveBetsLive: bool('LIVE_BETS_LIVE', d.liveBetsLive),
+    liveSports: list('LIVE_SPORTS', d.liveSports).map((x) => x.toLowerCase()),
+    livePollSeconds: num('LIVE_POLL_SECONDS', d.livePollSeconds),
+    liveIdleCheckSeconds: num('LIVE_IDLE_CHECK_SECONDS', d.liveIdleCheckSeconds),
+    liveMinEv: num('LIVE_MIN_EV', d.liveMinEv),
+    liveMaxOddsAgeSeconds: num('LIVE_MAX_ODDS_AGE_SECONDS', d.liveMaxOddsAgeSeconds),
+    liveMaxHoursSinceStart: num('LIVE_MAX_HOURS_SINCE_START', d.liveMaxHoursSinceStart),
     oddsPapiKey: str('ODDSPAPI_KEY', ''),
     oddsPapiWhenFewerThan: num('ODDSPAPI_WHEN_FEWER_THAN', d.oddsPapiWhenFewerThan),
     oddsPapiMinIntervalMinutes: num('ODDSPAPI_MIN_INTERVAL_MINUTES', d.oddsPapiMinIntervalMinutes),
@@ -165,11 +182,13 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);
   if (s.altTotalsMinEv < 0 || s.altTotalsMinEv > 0.5) fail(`ALT_TOTALS_MIN_EV=${s.altTotalsMinEv} must be between 0 and 0.5`);
+  if (s.liveBetting && s.livePollSeconds < 20) fail('LIVE_POLL_SECONDS must be at least 20');
+  if (s.liveMinEv < 0 || s.liveMinEv > 0.5) fail(`LIVE_MIN_EV=${s.liveMinEv} must be between 0 and 0.5`);
   if (s.oddsPapiRequestsPerScan < 1 || s.oddsPapiRequestsPerScan > 10) fail('ODDSPAPI_REQUESTS_PER_SCAN must be 1..10');
   if (s.teamTotalsMinEv < 0 || s.teamTotalsMinEv > 0.5) fail(`TEAM_TOTALS_MIN_EV=${s.teamTotalsMinEv} must be between 0 and 0.5`);
   if (s.fastScanMinutes > 0 && s.fastPollSeconds < 60) fail('FAST_POLL_SECONDS must be at least 60');

@@ -49,10 +49,13 @@ export class BetikaExecutor {
       this.log.error?.(`betika: refusing ${selection(opp)} - price floor is not a number (check MIN_EV / tax settings)`);
       return { status: 'skipped', reason: 'bad_settings' };
     }
+    if (opp.inPlay && !opp.betikaRef.liveMatchId) return { status: 'skipped', reason: 'no_live_match' };
     const bet = {
       parentMatchId: opp.betikaRef.parentMatchId, ...betikaPick(opp),
+      ...(opp.inPlay ? { liveMatchId: opp.betikaRef.liveMatchId } : {}),
       minOdds: round3(minOdds), minEffectiveOdds: round3(minEffective),
-      stake, live: this.s.betikaLive,
+      // in-play bets are real only when LIVE_BETS_LIVE is also on (dry run otherwise)
+      stake, live: this.s.betikaLive && (!opp.inPlay || this.s.liveBetsLive),
     };
 
     let result;
@@ -80,7 +83,8 @@ export class BetikaExecutor {
 
     const ticket = result.betId ? ` ticket ${result.betId}` : '';
     const bal = result.balanceAfter != null ? ` | balance KES ${result.balanceAfter}` : '';
-    const msg = `Betika ${result.status.toUpperCase()}${ticket}: ${selection(opp)} (${matchup(opp)}) `
+    const inPlay = opp.inPlay ? ` [LIVE ${opp.betikaRef.period ?? ''} ${opp.betikaRef.clock ?? ''} ${opp.betikaRef.score ?? ''}]`.replace(/\s+]/, ']') : '';
+    const msg = `Betika ${result.status.toUpperCase()}${ticket}${inPlay}: ${selection(opp)} (${matchup(opp)}) `
       + `stake KES ${stake} @ ${result.odds ?? '?'} (min ${bet.minOdds})${bal}${result.message && result.status !== 'placed' ? ` - ${result.message}` : ''}`;
     this.log.info?.(msg);
     // Phone/Discord alerts only for outcomes that matter; price moves etc. retry quietly next scan.

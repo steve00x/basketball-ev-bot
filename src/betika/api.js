@@ -4,6 +4,7 @@ import { SPORTS } from '../sports.js';
 import { competitionFilter } from '../sports.js';
 
 export const BETIKA_API = 'https://api.betika.com/v1/uo';
+export const BETIKA_LIVE_API = 'https://live.betika.com/v1/uo';
 export const BASKETBALL_SPORT_ID = SPORTS.basketball.betikaSportId;
 // period_id 9 = every upcoming match. Without it Betika returns only today's games
 // (Kenya time), so late-night tip-offs were missing.
@@ -152,4 +153,36 @@ export class BetikaAPI {
   }
 
   async basketball() { return this.matches('basketball'); }
+
+  /**
+   * In-play matches of one sport (Betika's live feed: same market ids as pre-game, filter `sport=`).
+   * Only prices Betika takes right now are kept: bet_status STARTED, market_active 1, odd_active 1.
+   */
+  async liveMatches(sport) {
+    const spec = SPORTS[sport];
+    if (!spec) throw new Error(`unknown sport "${sport}"`);
+    const subTypes = [spec.h2h.subType, spec.totals?.subType, spec.doubleChance?.subType, spec.drawNoBet?.subType].filter(Boolean);
+    const url = new URL(`${BETIKA_LIVE_API}/matches`);
+    Object.entries({ page: 1, limit: 1000, sub_type_id: subTypes.join(','), sport: spec.betikaSportId, sort: 1 })
+      .forEach(([k, v]) => url.searchParams.set(k, v));
+    const res = await this.fetchImpl(url, { signal: AbortSignal.timeout(this.timeoutMs), headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error(`Betika live API: HTTP ${res.status}`);
+    const rows = (await res.json()).data ?? [];
+    const open = rows.filter((m) => m.bet_status === 'STARTED' && Number(m.active) === 1 && Number(m.sport_id) === spec.betikaSportId)
+      .map((m) => ({ ...m, odds: (m.odds ?? []).filter((o) => Number(o.market_active) === 1)
+        .map((o) => ({ ...o, odds: (o.odds ?? []).filter((x) => Number(x.odd_active) === 1 && Number(x.odd_value) > 1) })) }));
+    const byParent = new Map(open.map((m) => [String(m.parent_match_id), m]));
+    return parseListings({ data: open }, { data: open }, spec, sport).map((rec) => {
+      const m = byParent.get(rec.parentMatchId);
+      return { ...rec, live: true, liveMatchId: String(m.match_id), clock: m.match_time, period: m.event_status, score: m.current_score };
+    });
+  }
+
+  async allLiveMatches(sports, log = console) {
+    const out = [];
+    for (const sport of sports) {
+      try { out.push(...(await this.liveMatches(sport))); } catch (e) { log.warn?.(`betika: ${sport} live odds unavailable: ${e.message}`); }
+    }
+    return out;
+  }
 }
