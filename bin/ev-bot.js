@@ -408,10 +408,15 @@ const commands = {
     return 0;
   }, { headless: false }),
 
+  // Read the balance the way the bot does and show where on Betika's page it was found
   balance: () => withBrowser(async (c) => {
     await c.ensureLoggedIn();
-    console.log(await c.balance());
-    return 0;
+    const v = await c.readBalance();
+    console.log(`balance: ${v ?? 'not found'}`);
+    console.log('seen on the page:');
+    for (const x of c.lastBalanceSources ?? []) console.log(`  ${x.source.padEnd(13)} ${String(x.value).padStart(10)}  ${x.labelled ? '(labelled Balance) ' : ''}${x.where}`);
+    if (!c.lastBalanceSources?.length) console.log('  nothing - send a screenshot of the top of Betika\'s page when logged in');
+    return v == null ? 1 : 0;
   }),
 
   discover: () => withBrowser(async (c) => { await c.discover('discover'); return 0; }, { headless: false }),

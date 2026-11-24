@@ -263,16 +263,28 @@ test('games already started are neither matched nor reported as unmatched', () =
   assert.deepEqual(r.unmatched, ['Wrexham AFC @ Bristol City (not on Betika right now)']); // only the upcoming one
 });
 
-test('readBalance: reloads the home page and waits for the header to show a number', async () => {
-  const { BetikaClient } = await import('../src/betika/client.js');
-  const c = Object.create(BetikaClient.prototype);
-  c.sel = { urls: { home: 'H' } };
-  const visited = [];
-  let reads = 0;
-  c.goto = async (u) => { visited.push(u); };
-  c.balance = async () => (++reads < 2 ? null : 1310.5); // header fills in a moment after load
-  assert.equal(await c.readBalance({ waitMs: 5000 }), 1310.5);
-  assert.deepEqual(visited, ['H']);
-  c.balance = async () => null;
-  assert.equal(await c.readBalance({ waitMs: 0 }), null); // never shown: null, not a guess
+test('readBalance: Betika account data first, then a header amount labelled Balance, never a guess', async () => {
+  const { BetikaClient, balanceFields } = await import('../src/betika/client.js');
+  assert.deepEqual(balanceFields({ data: { balance: '1,233.79', bonus_balance: 50, jackpot: { balance_text: 'x' } } }),
+    [{ path: 'data.balance', value: 1233.79, main: true }]);
+  const fake = ({ api = null, header = [], selector = null }) => {
+    const c = Object.create(BetikaClient.prototype);
+    c.sel = { urls: { home: 'H' }, unverified_balance: '.x' };
+    let listener;
+    const page = { on: (_, f) => { listener = f; }, off() {}, evaluate: async () => header };
+    c.start = async () => page;
+    c.goto = async () => {
+      if (api) await listener({ url: () => 'https://api.betika.com/v1/balance', headers: () => ({ 'content-type': 'application/json' }), json: async () => api });
+    };
+    c.balance = async () => selector;
+    return c;
+  };
+  let c = fake({ api: { data: { balance: 1310.5 } }, header: [{ value: 999, labelled: true, where: 'h' }] });
+  assert.equal(await c.readBalance({ waitMs: 0 }), 1310.5);
+  assert.equal(c.lastBalanceSources[0].source, 'account data');
+  c = fake({ header: [{ value: 25000, labelled: false, where: 'jackpot' }, { value: 1233.79, labelled: true, where: 'balance' }] });
+  assert.equal(await c.readBalance({ waitMs: 0 }), 1233.79);
+  c = fake({ header: [{ value: 25000, labelled: false, where: 'jackpot' }] });
+  assert.equal(await c.readBalance({ waitMs: 0 }), null); // an unlabelled amount could be anything
+  assert.equal(c.lastBalanceSources.length, 1);           // but it is reported, to find the right spot
 });

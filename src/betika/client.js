@@ -11,6 +11,50 @@ export const loadSelectors = (file) => JSON.parse(fs.readFileSync(file || DEFAUL
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const toNum = (t) => { const n = parseFloat(String(t ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : null; };
+
+export { headerBalances };
+
+/** Fields named like the cash balance anywhere in a JSON reply (bonus/jackpot balances are left out). */
+export function balanceFields(json) {
+  const out = [];
+  const walk = (v, path, depth) => {
+    if (depth > 6 || v == null || typeof v !== 'object') return;
+    for (const [k, x] of Object.entries(v)) {
+      const p = path ? `${path}.${k}` : k;
+      if (/^(balance|account_balance|user_balance|real_balance|wallet_balance|cash_balance|main_balance)$/i.test(k)
+          && (typeof x === 'number' || (typeof x === 'string' && /^\s*-?[\d,]+(\.\d+)?\s*$/.test(x)))) {
+        out.push({ path: p, value: Number(String(x).replace(/,/g, '')), main: /^balance$/i.test(k) });
+      } else walk(x, p, depth + 1);
+    }
+  };
+  walk(json, '', 0);
+  return out;
+}
+
+/** Runs in the page: KES amounts near the top of the page, marked when "balance" is written next to them. */
+function headerBalances() {
+  const out = [];
+  const money = /(?:KES|Ksh)\.?\s*([\d,]+(?:\.\d{1,2})?)/i;
+  for (const e of document.querySelectorAll('body *')) {
+    if (e.children.length > 2 || [...e.children].some((c) => money.test(c.textContent ?? ''))) continue; // innermost only
+    const t = (e.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 60) continue;
+    const m = t.match(money);
+    if (!m) continue;
+    const r = e.getBoundingClientRect();
+    if (!r.width || !r.height || r.top > 160) continue; // header only
+    let near = e, labelled = false;
+    for (let i = 0; i < 4 && near; i++, near = near.parentElement) {
+      const text = near.textContent ?? '';
+      if ((text.match(/(?:KES|Ksh)\.?\s*[\d,]/gi) ?? []).length > 1) break; // reached a box with other amounts too
+      if (/bonus|jackpot|points/i.test(text)) break; // a bonus balance is not cash
+      if (/balance/i.test(text)) { labelled = true; break; }
+    }
+    out.push({ where: `${e.tagName.toLowerCase()}${e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/).join('.') : ''} "${t}"`,
+      value: Number(m[1].replace(/,/g, '')), labelled });
+  }
+  return out;
+}
 const SECRET_KEYS = /token|password|pass|auth|session|pin/i;
 // stricter, for anything printed to the screen: no account ids or contact details either
 const PRINT_SECRET_KEYS = /token|password|pass|auth|session|pin|profile|msisdn|phone|mobile|user_?id|customer|email|account/i;
@@ -162,16 +206,43 @@ export class BetikaClient {
   }
 
   /**
-   * Fresh balance straight from Betika: reload the home page (the header shows the account balance)
-   * and wait for a number to appear. Read-only. Returns a number or null.
+   * Fresh balance straight from Betika (read-only). Reloads the home page and looks in three places:
+   *  1. the account data the page loads in the background (a field named "balance"),
+   *  2. an amount in the header labelled "Balance" (e.g. "Balance KES 1,233.79"),
+   *  3. the `unverified_balance` selector.
+   * What was seen is kept in `lastBalanceSources` (for `ev-bot balance`). Returns a number or null.
    */
   async readBalance({ waitMs = 15000 } = {}) {
-    await this.goto(this.sel.urls.home);
-    const until = Date.now() + waitMs;
-    for (;;) {
-      const v = await this.balance().catch(() => null);
-      if (v != null || Date.now() >= until) return v;
-      await sleep(1000);
+    const page = await this.start();
+    const fromApi = [];
+    const onResponse = async (res) => {
+      try {
+        const u = new URL(res.url());
+        if (!u.hostname.endsWith('betika.com') || ['www.betika.com', 'cdn.betika.com', 'media.betika.com'].includes(u.hostname)) return;
+        if (/\/uo\/(matches|sport|totalMatches)|\/v1\/sports/.test(u.pathname)) return; // odds lists
+        if (!(res.headers()['content-type'] ?? '').includes('json')) return;
+        // only fields named like a balance are taken; nothing else from the reply is kept
+        for (const hit of balanceFields(await res.json())) fromApi.push({ where: `${u.hostname}${u.pathname} ${hit.path}`, value: hit.value, main: hit.main });
+      } catch { /* body gone after navigation */ }
+    };
+    page.on('response', onResponse);
+    try {
+      await this.goto(this.sel.urls.home);
+      const until = Date.now() + waitMs;
+      for (;;) {
+        const header = await page.evaluate(headerBalances).catch(() => []);
+        const selector = await this.balance().catch(() => null);
+        this.lastBalanceSources = [
+          ...fromApi.map((x) => ({ source: 'account data', ...x })),
+          ...header.map((x) => ({ source: 'page header', ...x })),
+          ...(selector != null ? [{ source: 'selector', where: this.sel.unverified_balance, value: selector }] : []),
+        ];
+        const pick = fromApi.find((x) => x.main) ?? fromApi[0] ?? header.find((x) => x.labelled) ?? (selector != null ? { value: selector } : null);
+        if (pick || Date.now() >= until) return pick ? pick.value : null;
+        await sleep(1000);
+      }
+    } finally {
+      page.off('response', onResponse);
     }
   }
 

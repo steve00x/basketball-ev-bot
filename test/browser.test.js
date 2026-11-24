@@ -6,7 +6,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BetikaClient, DEFAULT_SELECTORS, classifyBetResponse, redact } from '../src/betika/client.js';
+import { BetikaClient, DEFAULT_SELECTORS, classifyBetResponse, headerBalances, redact } from '../src/betika/client.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const chromePath = process.env.CHROME_PATH || (fs.existsSync('/opt/pw-browsers/chromium') ? '/opt/pw-browsers/chromium' : '');
@@ -160,4 +160,18 @@ test('classifyBetResponse and redact', () => {
   assert.equal(classifyBetResponse(500, 'oops').status, 'rejected');
   assert.equal(classifyBetResponse(200, { foo: 1 }).status, 'unknown');
   assert.deepEqual(redact({ token: 'a', profile: { password: 'b', id: 1 } }), { token: '[redacted]', profile: { password: '[redacted]', id: 1 } });
+});
+
+test('header balance: finds a KES amount labelled Balance at the top, innermost element, not jackpots lower down', async () => {
+  const page = await client.start();
+  await page.setContent(`<header style="height:60px"><nav>
+      <a class="jp">Jackpot KES 25,000,000</a>
+      <div class="topnav__account"><span class="lbl">Balance</span> <span class="amt">KES 1,233.79</span></div>
+      <div class="bonus">Bonus Balance KES 50.00</div></nav></header>
+    <main style="margin-top:400px"><div>Balance KES 9.99</div></main>`);
+  const found = await page.evaluate(headerBalances);
+  assert.deepEqual(found.map((x) => [x.value, x.labelled]), [[25000000, false], [1233.79, true], [50, false]]);
+  assert.ok(found[1].where.startsWith('span.amt'));
+  await page.setContent('<div class="topnav"><span>KES 512.40</span></div>'); // amount on its own: reported, not trusted
+  assert.deepEqual((await page.evaluate(headerBalances)).map((x) => [x.value, x.labelled]), [[512.4, false]]);
 });
