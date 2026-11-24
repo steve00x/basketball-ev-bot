@@ -210,6 +210,8 @@ const commands = {
     const bySport = await papi.sportGroups(groups);
     console.log(`sports: ${Object.entries(bySport).map(([id, g]) => `${g}=${id}`).join(', ') || 'none of your SPORTS found'}`);
     const events = await papi.fetchEvents(s, groups);
+    console.log('leagues (put ids in ODDSPAPI_TOURNAMENTS to choose them yourself):');
+    for (const l of papi.lastLeagues ?? []) console.log(`  ${String(l.id).padStart(6)}  ${l.group.padEnd(11)} ${l.country}: ${l.name}`);
     const count = (e, key) => e.bookmakers[0].markets.find((m) => m.key === key)?.outcomes.length ?? 0;
     for (const e of events.slice(0, 15)) {
       console.log(`${e.commence_time.slice(0, 16)}  ${e.sport_key.padEnd(24)} ${`${e.home_team} v ${e.away_team}`.padEnd(46)}`

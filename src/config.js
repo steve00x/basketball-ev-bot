@@ -79,6 +79,7 @@ export const DEFAULTS = Object.freeze({
   oddsPapiMinIntervalMinutes: 180,
   oddsPapiRequestsPerScan: 1, // each request = up to 5 leagues
   oddsPapiTournaments: [],
+  oddsPapiSports: ['basketball', 'soccer'],
   oddsPapiCachePath: 'oddspapi-cache.json',
   teamTotalsMinEv: 0.04,
   teamTotalsMaxDistance: 4,
@@ -144,6 +145,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     oddsPapiMinIntervalMinutes: num('ODDSPAPI_MIN_INTERVAL_MINUTES', d.oddsPapiMinIntervalMinutes),
     oddsPapiRequestsPerScan: num('ODDSPAPI_REQUESTS_PER_SCAN', d.oddsPapiRequestsPerScan),
     oddsPapiTournaments: list('ODDSPAPI_TOURNAMENTS', d.oddsPapiTournaments),
+    oddsPapiSports: list('ODDSPAPI_SPORTS', d.oddsPapiSports).map((x) => x.toLowerCase()),
     oddsPapiCachePath: str('ODDSPAPI_CACHE_PATH', d.oddsPapiCachePath),
     teamTotalsMinEv: num('TEAM_TOTALS_MIN_EV', d.teamTotalsMinEv),
     teamTotalsMaxDistance: num('TEAM_TOTALS_MAX_DISTANCE', d.teamTotalsMaxDistance),

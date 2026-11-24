@@ -193,28 +193,34 @@ export class OddsPapi {
    * Leagues to scan: explicit ODDSPAPI_TOURNAMENTS ids, or the busiest leagues of our sports
    * (by upcoming games), skipping women's/youth/virtual ones unless chosen explicitly.
    */
-  async chooseTournaments(groupBySportId, { explicit = [], max = 5 } = {}) {
+  async chooseTournaments(groupBySportId, { explicit = [], max = 5, priority = [] } = {}) {
     const all = {};
     const ranked = [];
-    for (const sportId of Object.keys(groupBySportId)) {
+    const rank = (g) => { const i = priority.indexOf(g); return i < 0 ? priority.length : i; };
+    for (const [sportId, group] of Object.entries(groupBySportId)) {
       for (const t of await this.tournaments(sportId)) {
-        all[t.tournamentId] = { ...t, sportId: Number(sportId) };
+        all[t.tournamentId] = { ...t, sportId: Number(sportId), group };
         const upcoming = (t.upcomingFixtures ?? 0) + (t.futureFixtures ?? 0);
-        const skip = /women|u\d{2}|youth|reserve|esoccer|srl|simulated|virtual|utr|itf|doubles/i.test(`${t.tournamentName} ${t.categoryName}`);
-        if (upcoming > 0 && !skip) ranked.push({ id: t.tournamentId, upcoming: t.upcomingFixtures ?? 0, future: t.futureFixtures ?? 0 });
+        const skip = /women|u\d{2}|youth|reserve|\bii\b|\biii\b|esoccer|srl|simulated|virtual|utr|itf|doubles/i.test(`${t.tournamentName} ${t.categoryName}`);
+        if (upcoming > 0 && !skip) ranked.push({ id: t.tournamentId, group, upcoming: t.upcomingFixtures ?? 0, future: t.futureFixtures ?? 0 });
       }
     }
+    // ODDSPAPI_SPORTS order first (e.g. basketball before soccer), then the busiest leagues of each sport
     const ids = explicit.length ? explicit.map(Number).filter((id) => all[id])
-      : ranked.sort((a, b) => b.upcoming - a.upcoming || b.future - a.future).slice(0, max).map((r) => r.id);
+      : ranked.sort((a, b) => rank(a.group) - rank(b.group) || b.upcoming - a.upcoming || b.future - a.future).slice(0, max).map((r) => r.id);
     return { ids, all };
   }
 
   /** Everything for one scan: Pinnacle events for up to `requests` x 5 leagues. */
   async fetchEvents(s, groups) {
+    // Only the sports chosen for OddsPapi (default basketball, soccer), in that priority order
+    if (s.oddsPapiSports?.length) groups = s.oddsPapiSports.filter((g) => groups.includes(g));
     const groupBySportId = await this.sportGroups(groups);
     if (!Object.keys(groupBySportId).length) return [];
     const markets = await this.markets();
-    const { ids, all } = await this.chooseTournaments(groupBySportId, { explicit: s.oddsPapiTournaments, max: 5 * s.oddsPapiRequestsPerScan });
+    const { ids, all } = await this.chooseTournaments(groupBySportId,
+      { explicit: s.oddsPapiTournaments, max: 5 * s.oddsPapiRequestsPerScan, priority: s.oddsPapiSports ?? [] });
+    this.lastLeagues = ids.map((id) => ({ id, name: all[id].tournamentName, country: all[id].categoryName, group: all[id].group }));
     const participants = {};
     for (const sportId of new Set(ids.map((id) => all[id].sportId))) Object.assign(participants, await this.participants(sportId));
     const events = [];

@@ -110,3 +110,18 @@ test('client: rate limit retried, quota exhaustion stops further billable calls,
   assert.equal((await api.account()).request_count, 12); // still allowed
   assert.equal(new URL(`https://x${calls[0]}`).pathname, '/v4/sports');
 });
+
+test('league choice: sport priority first (basketball before table tennis), then busiest; II/women skipped', async () => {
+  const tours = {
+    11: [{ tournamentId: 1, tournamentName: 'NCAA, Regular Season', categoryName: 'USA', upcomingFixtures: 60 },
+      { tournamentId: 2, tournamentName: 'NBA', categoryName: 'USA', upcomingFixtures: 10 },
+      { tournamentId: 3, tournamentName: 'NCAA Women', categoryName: 'USA', upcomingFixtures: 90 }],
+    25: [{ tournamentId: 7, tournamentName: 'TT Elite Series', categoryName: 'Poland', upcomingFixtures: 400 }],
+    10: [{ tournamentId: 4, tournamentName: 'Premier League', categoryName: 'England', upcomingFixtures: 10 },
+      { tournamentId: 5, tournamentName: 'Feeder Dusseldorf II', categoryName: 'Germany', upcomingFixtures: 300 }],
+  };
+  const api = new OddsPapi('k', { cachePath: ':memory:', log: { info() {} } });
+  api.tournaments = async (id) => tours[id];
+  const { ids } = await api.chooseTournaments({ 11: 'basketball', 10: 'soccer', 25: 'tabletennis' }, { max: 5, priority: ['basketball', 'soccer'] });
+  assert.deepEqual(ids, [1, 2, 4, 7]); // NCAA, NBA, EPL, then table tennis last; women's and "II" never
+});
