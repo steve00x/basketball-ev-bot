@@ -134,3 +134,25 @@ export function resultsSummary(bets) {
     dryRun: sum(firstDryRuns(bets)),
   };
 }
+
+/**
+ * Running totals for the dashboard graph: settled bets in game order, cumulative actual profit
+ * (Betika's payout where known, else the final-score grade) against cumulative expected profit
+ * (stake x EV) over the same bets. Real bets and (first) dry runs separately.
+ */
+export function profitCurve(bets) {
+  const outcome = (b) => ({ won: 'won', lost: 'lost', void: 'push' })[b.betikaStatus] ?? b.result;
+  const curve = (list) => {
+    const settled = list.filter((b) => ['won', 'lost', 'push'].includes(outcome(b)))
+      .map((b) => ({ b, t: +new Date(b.grade?.commenceTime ?? b.at) }))
+      .sort((x, y) => x.t - y.t);
+    let actual = 0, expected = 0;
+    return settled.map(({ b, t }, i) => {
+      actual += b.betikaProfit ?? b.profit ?? 0;
+      expected += (b.stake ?? 0) * (b.ev ?? 0);
+      return { n: i + 1, at: new Date(t).toISOString(), pick: b.selection ?? '', game: b.matchup ?? '', result: outcome(b),
+        profit: round2(b.betikaProfit ?? b.profit ?? 0), actual: round2(actual), expected: round2(expected) };
+    });
+  };
+  return { real: curve(bets.filter((b) => b.live && b.status === 'placed')), dryRun: curve(firstDryRuns(bets)) };
+}
