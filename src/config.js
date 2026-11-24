@@ -73,6 +73,8 @@ export const DEFAULTS = Object.freeze({
   altTotalsMinEv: 0.04,
   altTotalsMaxDistance: 6,
   teamTotals: true,
+  settle: true,                 // grade bets from final scores (The Odds API /scores)
+  settleIntervalMinutes: 60,
   dashboard: true,
   dashboardPort: 3000,
   // In-play betting (Pinnacle live prices from The Odds API vs Betika's live feed)
@@ -151,6 +153,8 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     altTotalsMinEv: num('ALT_TOTALS_MIN_EV', d.altTotalsMinEv),
     altTotalsMaxDistance: num('ALT_TOTALS_MAX_DISTANCE', d.altTotalsMaxDistance),
     teamTotals: bool('TEAM_TOTALS', d.teamTotals),
+    settle: bool('SETTLE', d.settle),
+    settleIntervalMinutes: num('SETTLE_INTERVAL_MINUTES', d.settleIntervalMinutes),
     dashboard: bool('DASHBOARD', d.dashboard),
     dashboardPort: num('DASHBOARD_PORT', d.dashboardPort),
     liveBetting: bool('LIVE_BETTING', d.liveBetting),
@@ -186,7 +190,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);

@@ -1,6 +1,7 @@
 // Local dashboard: http://localhost:3000 while the bot runs. Listens on 127.0.0.1 only.
 import http from 'node:http';
 import { dedupeKey, matchup, selection } from './scanner.js';
+import { resultsSummary } from './settle.js';
 
 /** Live status the scan loop updates; the dashboard reads it. */
 export const botState = {
@@ -45,11 +46,13 @@ export function dashboardData(store, s, state = botState, now = new Date()) {
       expectedProfit: placedAll.reduce((t, b) => t + (b.stake ?? 0) * (b.ev ?? 0), 0),
     },
     balance: lastBalance,
+    results: resultsSummary(bets),
     opportunities: state.opportunities,
     closest: state.closest,
     bets: [...bets].reverse().slice(0, 100).map((b) => ({
       at: b.at, matchup: b.matchup, selection: b.selection, odds: b.odds ?? b.expectedOdds, stake: b.stake, ev: b.ev,
       status: b.status, ticket: b.betId ?? null, live: !!b.live, inPlay: !!b.inPlay, message: b.status === 'placed' ? '' : (b.message ?? ''),
+      result: b.result ?? null, profit: b.profit ?? null, finalScore: b.finalScore ?? null,
     })),
   };
 }
@@ -125,6 +128,12 @@ function tile(k, v, s, ratio) {
   if (ratio != null) { const b = el('div', null, 'bar'); const i = el('i'); i.style.width = Math.min(100, ratio * 100) + '%'; b.append(i); d.append(b); }
   return d;
 }
+function resultTile(k, r) {
+  const d = tile(k, (r.profit >= 0 ? '+' : '') + kes(r.profit),
+    r.won + 'W ' + r.lost + 'L ' + r.push + 'P · ROI ' + (r.roi == null ? '–' : pct(r.roi)) + ' · expected ' + kes(r.expected) + ' · ' + r.pending + ' unsettled');
+  d.querySelector('.v').className = 'v ' + (r.profit > 0 ? 'pos' : r.profit < 0 ? 'neg' : '');
+  return d;
+}
 const statusClass = (s) => s === 'placed' ? 'pos' : (s === 'rejected' || s === 'error' || s === 'unknown') ? 'neg' : 'muted';
 async function refresh() {
   let d; try { d = await (await fetch('/api/state', { cache: 'no-store' })).json(); } catch { $('updated').textContent = 'bot not reachable'; return; }
@@ -142,7 +151,9 @@ async function refresh() {
     tile('Expected profit today', kes(t.expectedProfit), 'stake × EV of placed bets'),
     tile('Betika balance', d.balance != null ? kes(d.balance) : '–', 'from the last confirmed bet'),
     tile('Odds API credits', d.credits ?? '–', 'remaining'),
-    tile('All time', d.allTime.placed + ' bets', kes(d.allTime.staked) + ' staked · ' + kes(d.allTime.expectedProfit) + ' expected'));
+    tile('All time', d.allTime.placed + ' bets', kes(d.allTime.staked) + ' staked · ' + kes(d.allTime.expectedProfit) + ' expected'),
+    resultTile('Actual profit (real bets)', d.results.real),
+    resultTile('Dry-run profit (paper)', d.results.dryRun));
   table($('opps'), [
     { h: 'Game', f: (o) => o.matchup }, { h: 'Pick', f: (o) => o.selection + (o.inPlay ? '  · LIVE' : '') + (o.model ? '  · model' : '') },
     { h: 'Betika', num: 1, f: (o) => o.odds.toFixed(2) }, { h: 'Fair', num: 1, f: (o) => o.fair.toFixed(2) },
@@ -153,6 +164,8 @@ async function refresh() {
     { h: 'Time', f: (b) => time(b.at) }, { h: 'Game', f: (b) => b.matchup }, { h: 'Pick', f: (b) => b.selection + (b.inPlay ? '  · LIVE' : '') },
     { h: 'Odds', num: 1, f: (b) => b.odds ? Number(b.odds).toFixed(2) : '' }, { h: 'Stake', num: 1, f: (b) => b.stake ?? '' },
     { h: 'EV', num: 1, f: (b) => pct(b.ev) }, { h: 'Status', f: (b) => ({ t: (b.live || b.status === 'dry_run' ? '' : 'dry: ') + String(b.status).replace(/_/g, ' '), c: statusClass(b.status) }) },
+    { h: 'Result', f: (b) => b.result ? ({ t: b.result + (b.finalScore ? ' (' + b.finalScore + ')' : ''), c: b.result === 'won' ? 'pos' : b.result === 'lost' ? 'neg' : 'muted' }) : '' },
+    { h: 'Profit', num: 1, f: (b) => b.profit == null ? '' : ({ t: (b.profit > 0 ? '+' : '') + Math.round(b.profit), c: b.profit > 0 ? 'pos' : b.profit < 0 ? 'neg' : '' }) },
     { h: 'Ticket', f: (b) => b.ticket ?? '' }, { h: 'Note', f: (b) => ({ t: b.message ?? '', c: 'muted' }) }],
     d.bets ?? [], 'No bets yet.');
 }

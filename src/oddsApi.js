@@ -53,6 +53,11 @@ export class OddsAPI {
   }
 
   /** Upcoming events of one league, without odds. Costs no credits. */
+  /** Scores of recent games (completed: true once final). daysFrom up to 3; costs 2 credits with daysFrom. */
+  getScores(sport, daysFrom = 3) {
+    return this.get(`/sports/${sport}/scores`, { daysFrom, dateFormat: 'iso' });
+  }
+
   getEvents(sport) {
     return this.get(`/sports/${sport}/events`, { dateFormat: 'iso' });
   }

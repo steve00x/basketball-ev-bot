@@ -11,6 +11,7 @@ import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
 import { botState, startDashboard, summarizeOpps } from '../src/dashboard.js';
+import { settlePending } from '../src/settle.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
 import { teamSimilarity } from '../src/teamMatch.js';
 
@@ -22,6 +23,7 @@ Commands:
   sports      which of your SPORTS have Pinnacle prices now, Betika counts, credit cost
   oddspapi    check your OddsPapi key: quota, leagues and the Pinnacle markets it returns
   dashboard   open the dashboard on your bet log without scanning (scan also serves it)
+  settle      grade finished bets from final scores now and print profit and loss
   leagues S [text]  list OddsPapi league ids for sport S, e.g. leagues basketball euroleague
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
@@ -126,6 +128,7 @@ async function scan() {
     const fastGroups = s.fastScanSports;
     let lastFull = 0;
     let lastLive = 0, liveActive = false;
+    let lastSettle = 0;
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
     let kind = 'full';
     while (!stopping) {
@@ -166,6 +169,11 @@ async function scan() {
         }
       } catch (e) {
         log.error(`cycle failed: ${e.stack ?? e}`);
+      }
+      // Grade finished bets from final scores (about 2 credits per sport with unsettled bets)
+      if (s.settle && Date.now() - lastSettle >= s.settleIntervalMinutes * 60_000) {
+        lastSettle = Date.now();
+        try { await settlePending(api, store, log); } catch (e) { log.warn(`settle: ${e.message}`); }
       }
       if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
       const plan = nextScanPlan({ now: Date.now(), lastFull, s, upcoming });
@@ -251,6 +259,22 @@ const commands = {
     }
     console.log(`${events.length} events | OddsPapi requests used by this check: ${papi.requestsUsed}`);
     return events.length ? 0 : 1;
+  },
+
+  // Grade finished bets now from final scores and print the totals.
+  settle: async () => {
+    let api;
+    try { api = new OddsAPI(s.apiKey); } catch (e) { log.error(e.message); return 1; }
+    const store = new Store(s.storePath, { log });
+    const r = await settlePending(api, store, log);
+    const { resultsSummary } = await import('../src/settle.js');
+    const t = resultsSummary(store.data.bets);
+    for (const [name, x] of [['Real bets', t.real], ['Dry runs', t.dryRun]]) {
+      console.log(`${name}: ${x.won} won, ${x.lost} lost, ${x.push} push | staked KES ${x.staked} | profit KES ${x.profit}`
+        + `${x.roi != null ? ` (ROI ${(x.roi * 100).toFixed(1)}%)` : ''} | expected KES ${x.expected} | unsettled ${x.pending}`);
+    }
+    log.info(`settled now: ${r.settled} | credits remaining: ${api.requestsRemaining}`);
+    return 0;
   },
 
   // The dashboard on its own (bet history), without scanning: http://localhost:DASHBOARD_PORT

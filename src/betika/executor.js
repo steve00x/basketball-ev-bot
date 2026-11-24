@@ -79,6 +79,10 @@ export class BetikaExecutor {
       key: dedupeKey(opp), at: new Date().toISOString(), matchup: matchup(opp),
       selection: selection(opp), stake, minOdds: bet.minOdds, expectedOdds: opp.decimal,
       fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}), ...result,
+      // what settlement needs: the game and the exact pick
+      grade: { sport: opp.sport, eventId: opp.eventId, commenceTime: opp.commenceTime ? new Date(opp.commenceTime).toISOString() : null,
+        homeTeam: opp.homeTeam, awayTeam: opp.awayTeam, market: opp.market, outcome: opp.outcome, point: opp.point ?? null,
+        description: opp.description ?? null, code: opp.code ?? null, winningsTax: opp.winningsTax ?? 0 },
     });
 
     const ticket = result.betId ? ` ticket ${result.betId}` : '';
