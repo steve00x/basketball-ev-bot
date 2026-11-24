@@ -12,6 +12,10 @@ export const loadSelectors = (file) => JSON.parse(fs.readFileSync(file || DEFAUL
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const toNum = (t) => { const n = parseFloat(String(t ?? '').replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : null; };
 const SECRET_KEYS = /token|password|pass|auth|session|pin/i;
+// stricter, for anything printed to the screen: no account ids or contact details either
+const PRINT_SECRET_KEYS = /token|password|pass|auth|session|pin|profile|msisdn|phone|mobile|user_?id|customer|email|account/i;
+const redactForPrint = (v) => (Array.isArray(v) ? v.map(redactForPrint) : v && typeof v === 'object'
+  ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, PRINT_SECRET_KEYS.test(k) ? '[redacted]' : redactForPrint(x)])) : v);
 
 export function redact(v) {
   if (Array.isArray(v)) return v.map(redact);
@@ -321,6 +325,7 @@ export class BetikaClient {
     if (!(await this.isLoggedIn().catch(() => false))) await this.ensureLoggedIn();
     const bodies = [];
     this.lastHistoryCalls = []; // API paths My Bets called (no query values), to see where bets come from
+    this.lastHistoryFilters = [];
     const onResponse = async (res) => {
       try {
         const host = new URL(res.url()).hostname;
@@ -333,7 +338,13 @@ export class BetikaClient {
         const ct = res.headers()['content-type'] ?? '';
         if (ct.includes('json')) bodies.push(await res.json());
         // remember the page's own history request so later pages can be asked for the same way
-        if (/\/uo\/bethistory/.test(res.url()) && res.request().method() === 'POST') historyRequest = { url: res.url(), body: res.request().postData(), headers: res.request().headers() };
+        if (/\/uo\/bethistory/.test(res.url()) && res.request().method() === 'POST') {
+          historyRequest = { url: res.url(), body: res.request().postData(), headers: res.request().headers() };
+          // the filters the page asked for (secrets removed), to learn how settled bets are requested
+          let sent = null;
+          try { sent = JSON.parse(res.request().postData() ?? 'null'); } catch { /* not JSON */ }
+          if (sent && typeof sent === 'object') this.lastHistoryFilters.push(redactForPrint(sent));
+        }
       } catch { /* body gone after navigation */ }
     };
     let historyRequest = null;
@@ -345,14 +356,18 @@ export class BetikaClient {
         .catch((e) => { if (!/ERR_ABORTED|detached/i.test(e.message)) throw e; });
       await sleep(waitMs * 1.5);
       if (/\/login/.test(page.url())) throw new Error('Betika sent My Bets to the login page - run `node bin/ev-bot.js login` again');
+      // Open bets show first; finished ones are under another tab ("Settled", "Settled (4)", "All" ...)
+      this.lastHistoryTabs = [];
       for (const tab of ['settled', 'all']) {
         const clicked = await page.evaluate((t) => {
-          const el = [...document.querySelectorAll('button, a, li, span, div')]
-            .find((e) => e.children.length <= 1 && e.textContent.trim().toLowerCase() === t);
-          if (el) { el.click(); return true; }
-          return false;
+          const re = new RegExp(`^${t}\\b`, 'i');
+          const el = [...document.querySelectorAll('button, a, li, span, div, label')]
+            .filter((e) => e.offsetParent !== null && e.children.length <= 2)
+            .find((e) => re.test(e.textContent.replace(/\s+/g, ' ').trim()) && e.textContent.trim().length < 30);
+          if (el) { el.click(); return el.textContent.replace(/\s+/g, ' ').trim(); }
+          return null;
         }, tab);
-        if (clicked) await sleep(waitMs / 2);
+        if (clicked) { this.lastHistoryTabs.push(clicked); await sleep(waitMs / 2); }
       }
       // more pages of history (same request as the page made, next page number), up to `maxPages`
       const last = bodies.filter((b) => Array.isArray(b?.bets)).at(-1);
