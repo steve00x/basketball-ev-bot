@@ -75,6 +75,7 @@ export const DEFAULTS = Object.freeze({
   teamTotals: true,
   settle: true,                 // grade bets from final scores (The Odds API /scores)
   settleIntervalMinutes: 60,
+  betikaHistory: true,          // also read Betika's My Bets for placed bets (status and payout)
   dashboard: true,
   dashboardPort: 3000,
   // In-play betting (Pinnacle live prices from The Odds API vs Betika's live feed)
@@ -155,6 +156,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     teamTotals: bool('TEAM_TOTALS', d.teamTotals),
     settle: bool('SETTLE', d.settle),
     settleIntervalMinutes: num('SETTLE_INTERVAL_MINUTES', d.settleIntervalMinutes),
+    betikaHistory: bool('BETIKA_HISTORY', d.betikaHistory),
     dashboard: bool('DASHBOARD', d.dashboard),
     dashboardPort: num('DASHBOARD_PORT', d.dashboardPort),
     liveBetting: bool('LIVE_BETTING', d.liveBetting),

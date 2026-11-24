@@ -114,16 +114,19 @@ export async function settlePending(api, store, log = console, now = Date.now())
 
 /** Totals for the dashboard: real bets and dry runs separately. */
 export function resultsSummary(bets) {
+  // Betika's own verdict first (from My Bets), else our score-based grade
+  const outcome = (b) => ({ won: 'won', lost: 'lost', void: 'push' })[b.betikaStatus] ?? b.result;
   const sum = (list) => {
-    const settled = list.filter((b) => ['won', 'lost', 'push'].includes(b.result));
+    const settled = list.filter((b) => ['won', 'lost', 'push'].includes(outcome(b)));
     const staked = settled.reduce((t, b) => t + (b.stake ?? 0), 0);
-    const profit = settled.reduce((t, b) => t + (b.profit ?? 0), 0);
+    // Betika's own payout wins over our calculation when we have it
+    const profit = settled.reduce((t, b) => t + (b.betikaProfit ?? b.profit ?? 0), 0);
     return {
-      settled: settled.length, won: settled.filter((b) => b.result === 'won').length,
-      lost: settled.filter((b) => b.result === 'lost').length, push: settled.filter((b) => b.result === 'push').length,
+      settled: settled.length, won: settled.filter((b) => outcome(b) === 'won').length,
+      lost: settled.filter((b) => outcome(b) === 'lost').length, push: settled.filter((b) => outcome(b) === 'push').length,
       staked: round2(staked), profit: round2(profit), roi: staked ? profit / staked : null,
       expected: round2(settled.reduce((t, b) => t + (b.stake ?? 0) * (b.ev ?? 0), 0)),
-      pending: list.filter((b) => !b.result).length,
+      pending: list.filter((b) => !outcome(b)).length,
     };
   };
   return {

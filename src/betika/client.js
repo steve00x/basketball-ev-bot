@@ -311,4 +311,39 @@ export class BetikaClient {
     this.log.info?.(`recording Betika API calls to ${outDir}/ - log in, place a small bet by hand, then close the browser`);
     await new Promise((r) => this.browser.on('disconnected', r));
   }
+
+  /**
+   * Open "My Bets" in the logged-in browser and return the JSON Betika loads there (read-only).
+   * Also clicks a "Settled"/"All" tab if the page has one, to include finished bets.
+   */
+  async betHistory({ waitMs = 6000 } = {}) {
+    const page = await this.start();
+    if (!(await this.isLoggedIn().catch(() => false))) await this.ensureLoggedIn();
+    const bodies = [];
+    const onResponse = async (res) => {
+      try {
+        if (!/api\.betika\.com/i.test(res.url()) || res.request().method() !== 'GET') return;
+        if (/\/uo\/(matches|sport|totalMatches)|\/v1\/sports/.test(res.url())) return; // odds lists, not bets
+        const ct = res.headers()['content-type'] ?? '';
+        if (ct.includes('json')) bodies.push(await res.json());
+      } catch { /* body gone after navigation */ }
+    };
+    page.on('response', onResponse);
+    try {
+      await this.goto(this.sel.urls.myBets ?? 'https://www.betika.com/en-ke/mybets');
+      await sleep(waitMs);
+      for (const tab of ['settled', 'all']) {
+        const clicked = await page.evaluate((t) => {
+          const el = [...document.querySelectorAll('button, a, li, span, div')]
+            .find((e) => e.children.length <= 1 && e.textContent.trim().toLowerCase() === t);
+          if (el) { el.click(); return true; }
+          return false;
+        }, tab);
+        if (clicked) await sleep(waitMs / 2);
+      }
+    } finally {
+      page.off('response', onResponse);
+    }
+    return bodies;
+  }
 }

@@ -4,7 +4,8 @@
     "home": "https://www.betika.com/en-ke/",
     "login": "https://www.betika.com/en-ke/login",
     "match": "https://www.betika.com/en-ke/m/{parentMatchId}",
-    "liveMatch": "https://www.betika.com/en-ke/live/m/{liveMatchId}"
+    "liveMatch": "https://www.betika.com/en-ke/live/m/{liveMatchId}",
+    "myBets": "https://www.betika.com/en-ke/mybets"
   },
   "appReady": ".main-betslip",
   "login": {

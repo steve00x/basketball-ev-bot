@@ -52,7 +52,8 @@ export function dashboardData(store, s, state = botState, now = new Date()) {
     bets: [...bets].reverse().slice(0, 100).map((b) => ({
       at: b.at, matchup: b.matchup, selection: b.selection, odds: b.odds ?? b.expectedOdds, stake: b.stake, ev: b.ev,
       status: b.status, ticket: b.betId ?? null, live: !!b.live, inPlay: !!b.inPlay, message: b.status === 'placed' ? '' : (b.message ?? ''),
-      result: b.result ?? null, profit: b.profit ?? null, finalScore: b.finalScore ?? null,
+      result: b.result ?? null, profit: b.betikaProfit ?? b.profit ?? null, finalScore: b.finalScore ?? null,
+      betika: b.betikaStatus ?? null, mismatch: !!b.mismatch,
     })),
   };
 }
@@ -165,6 +166,7 @@ async function refresh() {
     { h: 'Odds', num: 1, f: (b) => b.odds ? Number(b.odds).toFixed(2) : '' }, { h: 'Stake', num: 1, f: (b) => b.stake ?? '' },
     { h: 'EV', num: 1, f: (b) => pct(b.ev) }, { h: 'Status', f: (b) => ({ t: (b.live || b.status === 'dry_run' ? '' : 'dry: ') + String(b.status).replace(/_/g, ' '), c: statusClass(b.status) }) },
     { h: 'Result', f: (b) => b.result ? ({ t: b.result + (b.finalScore ? ' (' + b.finalScore + ')' : ''), c: b.result === 'won' ? 'pos' : b.result === 'lost' ? 'neg' : 'muted' }) : '' },
+    { h: 'Betika says', f: (b) => b.betika ? ({ t: b.betika + (b.mismatch ? '  ⚠ check' : ''), c: b.mismatch ? 'neg' : b.betika === 'won' ? 'pos' : 'muted' }) : '' },
     { h: 'Profit', num: 1, f: (b) => b.profit == null ? '' : ({ t: (b.profit > 0 ? '+' : '') + Math.round(b.profit), c: b.profit > 0 ? 'pos' : b.profit < 0 ? 'neg' : '' }) },
     { h: 'Ticket', f: (b) => b.ticket ?? '' }, { h: 'Note', f: (b) => ({ t: b.message ?? '', c: 'muted' }) }],
     d.bets ?? [], 'No bets yet.');

@@ -12,6 +12,7 @@ import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
 import { botState, startDashboard, summarizeOpps } from '../src/dashboard.js';
 import { settlePending } from '../src/settle.js';
+import { applyHistory, historyShape, matchHistory } from '../src/betika/history.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
 import { teamSimilarity } from '../src/teamMatch.js';
 
@@ -24,6 +25,7 @@ Commands:
   oddspapi    check your OddsPapi key: quota, leagues and the Pinnacle markets it returns
   dashboard   open the dashboard on your bet log without scanning (scan also serves it)
   settle      grade finished bets from final scores now and print profit and loss
+  history     read Betika's My Bets: record Betika's status and payout on your placed bets
   leagues S [text]  list OddsPapi league ids for sport S, e.g. leagues basketball euroleague
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
@@ -174,6 +176,10 @@ async function scan() {
       if (s.settle && Date.now() - lastSettle >= s.settleIntervalMinutes * 60_000) {
         lastSettle = Date.now();
         try { await settlePending(api, store, log); } catch (e) { log.warn(`settle: ${e.message}`); }
+        // Betika's own record of placed bets (status and payout), read from My Bets
+        if (client && s.betikaLive && s.betikaHistory) {
+          try { await checkBetikaHistory(client, store, log); } catch (e) { log.warn(`betika history: ${e.message.split('\n')[0]}`); }
+        }
       }
       if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
       const plan = nextScanPlan({ now: Date.now(), lastFull, s, upcoming });
@@ -198,6 +204,20 @@ async function scan() {
 async function withBrowser(fn, overrides) {
   const client = makeClient(overrides);
   try { return await fn(client); } finally { await client.close(); }
+}
+
+/** Read Betika's My Bets and record its status/payout on our placed bets. Returns the raw bodies. */
+async function checkBetikaHistory(client, store, log) {
+  const open = store.data.bets.filter((b) => b.live && b.status === 'placed' && b.betId && !['won', 'lost', 'void'].includes(b.betikaStatus));
+  if (!open.length) return [];
+  const bodies = await client.betHistory();
+  const found = matchHistory(bodies, open.map((b) => ({ short: b.betId, long: b.betIdLong })));
+  const n = applyHistory(store.data.bets, found);
+  if (n) store.save();
+  const bad = store.data.bets.filter((b) => b.mismatch);
+  log.info(`betika history: ${found.size} of ${open.length} open tickets found, ${n} updated`
+    + (bad.length ? ` | CHECK: Betika and final score disagree on ${bad.map((b) => b.betId).join(', ')}` : ''));
+  return bodies;
 }
 
 /** Sport groups ("soccer", "basketball", ...) named or implied by SPORTS. */
@@ -259,6 +279,19 @@ const commands = {
     }
     console.log(`${events.length} events | OddsPapi requests used by this check: ${papi.requestsUsed}`);
     return events.length ? 0 : 1;
+  },
+
+  // Read Betika's My Bets once: update our bets, and print the data's shape (field names only)
+  history: async () => {
+    const store = new Store(s.storePath, { log });
+    return withBrowser(async (c) => {
+      await c.ensureLoggedIn();
+      const bodies = await checkBetikaHistory(c, store, log) ?? [];
+      const all = bodies.length ? bodies : await c.betHistory();
+      console.log(`My Bets loaded ${all.length} JSON responses. Their shape (field names only, no values):`);
+      for (const b of all.slice(0, 4)) console.log(JSON.stringify(historyShape(b)).slice(0, 1500));
+      return 0;
+    });
   },
 
   // Grade finished bets now from final scores and print the totals.
