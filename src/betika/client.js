@@ -326,6 +326,7 @@ export class BetikaClient {
     const bodies = [];
     this.lastHistoryCalls = []; // API paths My Bets called (no query values), to see where bets come from
     this.lastHistoryFilters = [];
+    this.lastHistoryReplays = [];
     const onResponse = async (res) => {
       try {
         const host = new URL(res.url()).hostname;
@@ -370,17 +371,36 @@ export class BetikaClient {
           for (const p of periods) {
             if (!p?.filter || String(p.filter) === String(body.period)) continue;
             for (let pg = 1; pg <= maxPages; pg++) {
-              const next = await page.evaluate(async (r, b) => {
-                const h = Object.fromEntries(Object.entries(r.headers).filter(([k]) => !/^(content-length|host|origin|referer|cookie)$/i.test(k)));
-                const res = await fetch(r.url, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
-                return res.ok ? res.json() : null;
-              }, historyRequest, { ...body, period: p.filter, page: String(pg) }).catch(() => null);
+              const r = await page.evaluate(async (req, b) => {
+                try {
+                  const h = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !/^(content-length|host|origin|referer|cookie)$/i.test(k)));
+                  const res = await fetch(req.url, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
+                  return { status: res.status, json: res.ok ? await res.json() : null };
+                } catch (e) { return { status: 0, error: String(e.message ?? e) }; }
+              }, historyRequest, { ...body, period: p.filter, page: String(pg) });
+              this.lastHistoryReplays.push(`${p.filter}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}, ${r.json?.bets?.length ?? 0} bets`);
+              const next = r.json;
               if (!next?.bets?.length) break;
               bodies.push(next);
               if (next.bets.length < Number(next.limit ?? Infinity)) break;
             }
           }
         } finally { replaying = false; }
+      }
+      // If asking directly brought nothing, click Betika's own period buttons by their exact names;
+      // the page then makes the request itself (the listener above collects the replies).
+      const extra = bodies.filter((b) => Array.isArray(b?.bets)).length;
+      if (extra <= 1) {
+        for (const title of ['All', 'Month', 'Week'].filter((t) => periods.some((p) => p.title === t))) {
+          const clicked = await page.evaluate((t) => {
+            const el = [...document.querySelectorAll('button, a, li, span, div, label')]
+              .find((e) => e.offsetParent !== null && e.textContent.replace(/\s+/g, ' ').trim() === t);
+            if (el) { el.click(); return true; }
+            return false;
+          }, title);
+          this.lastHistoryReplays.push(`clicked "${title}": ${clicked ? 'yes' : 'not found'}`);
+          if (clicked) { await sleep(waitMs); break; }
+        }
       }
     } finally {
       page.off('response', onResponse);
