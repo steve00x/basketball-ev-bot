@@ -316,7 +316,7 @@ export class BetikaClient {
    * Open "My Bets" in the logged-in browser and return the JSON Betika loads there (read-only).
    * Also clicks a "Settled"/"All" tab if the page has one, to include finished bets.
    */
-  async betHistory({ waitMs = 6000 } = {}) {
+  async betHistory({ waitMs = 6000, maxPages = 5 } = {}) {
     const page = await this.start();
     if (!(await this.isLoggedIn().catch(() => false))) await this.ensureLoggedIn();
     const bodies = [];
@@ -332,8 +332,11 @@ export class BetikaClient {
         if (/^(userinfo|ip|ke-experiment-service)\./.test(host)) return;
         const ct = res.headers()['content-type'] ?? '';
         if (ct.includes('json')) bodies.push(await res.json());
+        // remember the page's own history request so later pages can be asked for the same way
+        if (/\/uo\/bethistory/.test(res.url()) && res.request().method() === 'POST') historyRequest = { url: res.url(), body: res.request().postData(), headers: res.request().headers() };
       } catch { /* body gone after navigation */ }
     };
+    let historyRequest = null;
     page.on('response', onResponse);
     try {
       // My Bets has no bet slip panel, so don't wait for the usual page-ready marker: load it and
@@ -350,6 +353,22 @@ export class BetikaClient {
           return false;
         }, tab);
         if (clicked) await sleep(waitMs / 2);
+      }
+      // more pages of history (same request as the page made, next page number), up to `maxPages`
+      const last = bodies.filter((b) => Array.isArray(b?.bets)).at(-1);
+      if (historyRequest && last && last.bets.length >= Number(last.limit ?? Infinity)) {
+        let body;
+        try { body = JSON.parse(historyRequest.body ?? 'null'); } catch { body = null; }
+        for (let pg = Number(body?.page ?? last.page ?? 1) + 1; body && pg <= maxPages; pg++) {
+          const next = await page.evaluate(async (r, b) => {
+            const h = Object.fromEntries(Object.entries(r.headers).filter(([k]) => !/^(content-length|host|origin|referer|cookie)$/i.test(k)));
+            const res = await fetch(r.url, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
+            return res.ok ? res.json() : null;
+          }, historyRequest, { ...body, page: pg }).catch(() => null);
+          if (!next?.bets?.length) break;
+          bodies.push(next);
+          if (next.bets.length < Number(next.limit ?? Infinity)) break;
+        }
       }
     } finally {
       page.off('response', onResponse);

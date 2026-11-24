@@ -12,7 +12,7 @@ import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
 import { botState, startDashboard, summarizeOpps } from '../src/dashboard.js';
 import { settlePending } from '../src/settle.js';
-import { applyHistory, historyShape, matchHistory } from '../src/betika/history.js';
+import { applyHistory, historyShape, matchHistory, statusWords } from '../src/betika/history.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
 import { teamSimilarity } from '../src/teamMatch.js';
 
@@ -290,8 +290,9 @@ const commands = {
         const bodies = await checkBetikaHistory(c, store, log);
         const all = bodies?.length ? bodies : await c.betHistory();
         console.log(`Betika API calls made by My Bets (paths only):\n  ${[...new Set(c.lastHistoryCalls ?? [])].join('\n  ') || 'none'}`);
-        console.log(`My Bets loaded ${all.length} JSON responses. Their shape (field names only, no values):`);
-        for (const b of all.slice(0, 4)) console.log(JSON.stringify(historyShape(b)).slice(0, 1500));
+        console.log(`Status words Betika used (and how the bot reads them):\n  ${statusWords(all).join('\n  ') || 'none'}`);
+        const settledHere = store.data.bets.filter((b) => ['won', 'lost', 'void'].includes(b.betikaStatus)).length;
+        console.log(`Bets with Betika's result recorded: ${settledHere}`);
         return 0;
       } catch (e) {
         log.error(`betika history: ${e.message.split('\n')[0]}`);

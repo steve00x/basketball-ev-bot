@@ -47,17 +47,46 @@ export function matchHistory(responses, tickets) {
         if (ID_KEYS.test(k) && want.has(String(v).toUpperCase())) { short = want.get(String(v).toUpperCase()); break; }
       }
       if (!short || found.has(short)) continue;
-      const statusKey = Object.keys(o).find((k) => STATUS_KEYS.test(k));
-      const payoutKey = Object.keys(o).find((k) => PAYOUT_KEYS.test(k));
-      found.set(short, {
-        status: normalizeStatus(statusKey ? o[statusKey] : ''),
-        statusText: statusKey ? String(o[statusKey]) : null,
-        payout: payoutKey ? num(o[payoutKey]) : null,
-        fields: { status: statusKey ?? null, payout: payoutKey ?? null },
-      });
+      found.set(short, readBet(o));
     }
   }
   return found;
+}
+
+/**
+ * One bet from Betika's /v1/uo/bethistory (seen: short_bet_id, bet_id, bet_amount, possible_win,
+ * status, betStatus { text }, wht_* / tax_amount). betStatus.text is what Betika's own app shows,
+ * so it comes first; then the plain status field. A won bet pays possible_win minus withholding tax.
+ */
+export function readBet(o) {
+  const statusKey = Object.keys(o).find((k) => STATUS_KEYS.test(k));
+  const text = o.betStatus?.text ?? (statusKey ? o[statusKey] : null);
+  let status = normalizeStatus(o.betStatus?.text);
+  if (status === 'unknown') status = normalizeStatus(statusKey ? o[statusKey] : '');
+  let payout = null;
+  if (o.possible_win != null) {
+    const whtKey = Object.keys(o).find((k) => /^wht/i.test(k) && num(o[k]) != null);
+    const tax = whtKey ? num(o[whtKey]) : num(o.tax_amount);
+    payout = num(o.possible_win) - (tax ?? 0);
+  } else {
+    const payoutKey = Object.keys(o).find((k) => PAYOUT_KEYS.test(k));
+    payout = payoutKey ? num(o[payoutKey]) : null;
+  }
+  return { status, statusText: text == null ? null : String(text), payout: payout == null ? null : Math.round(payout * 100) / 100,
+    fields: { status: o.betStatus?.text != null ? 'betStatus.text' : statusKey ?? null } };
+}
+
+/** Distinct status words Betika uses (e.g. "Won", "Pending") with counts: no ids, no amounts. */
+export function statusWords(bodies) {
+  const count = new Map();
+  for (const body of bodies) {
+    for (const o of objects(body)) {
+      if (!('short_bet_id' in o || 'bet_id' in o)) continue;
+      const k = `status=${JSON.stringify(o.status ?? null)} betStatus.text=${JSON.stringify(o.betStatus?.text ?? null)} -> ${readBet(o).status}`;
+      count.set(k, (count.get(k) ?? 0) + 1);
+    }
+  }
+  return [...count].map(([k, n]) => `${n} x ${k}`);
 }
 
 /** Field names and types only (no values), to confirm the format without sharing personal data. */
