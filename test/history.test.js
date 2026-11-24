@@ -60,3 +60,19 @@ test('shape report has field names and types only, never values', () => {
   assert.deepEqual(shape, { data: [{ short_bet_id: 'string', msisdn: 'string', stake: 'number', status: 'string', legs: [{ team: 'string' }] }] });
   assert.ok(!JSON.stringify(shape).includes('0712345678'));
 });
+
+test("period requests go from Node with the page's body (token stays in the body)", async () => {
+  const { BetikaClient } = await import('../src/betika/client.js');
+  const sent = [];
+  const c = new BetikaClient({ log: { info() {}, warn() {} }, fetchImpl: async (url, opts) => {
+    sent.push({ url, opts });
+    return new Response(JSON.stringify({ bets: [{ short_bet_id: 'LDCH8C', betStatus: { text: 'Won' } }] }), { status: 200 });
+  } });
+  const req = { url: 'https://api.betika.com/v1/uo/bethistory', headers: { ':authority': 'api.betika.com', 'x-app': 'web', cookie: 'c=1' } };
+  const r = await c.postHistory(null, req, { page: '1', limit: '1000', period: 'YEAR', token: 'T' });
+  assert.deepEqual([r.status, r.via, r.json.bets.length], [200, 'node', 1]);
+  const h = sent[0].opts.headers;
+  assert.equal(JSON.parse(sent[0].opts.body).period, 'YEAR');
+  assert.equal(h['x-app'], 'web');
+  assert.ok(!(':authority' in h) && !('cookie' in h)); // no pseudo-headers, no cookies
+});

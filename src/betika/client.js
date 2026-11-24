@@ -62,8 +62,8 @@ export function classifyBetResponse(httpStatus, body) {
 
 export class BetikaClient {
   constructor({ headless = true, sessionDir = '.betika-session', chromePath = '', selectorsFile = '',
-    phone = '', password = '', proxy = '', betResponseTimeoutMs = 20000, log = console } = {}) {
-    Object.assign(this, { headless, sessionDir, chromePath, phone, password, proxy, betResponseTimeoutMs, log });
+    phone = '', password = '', proxy = '', betResponseTimeoutMs = 20000, fetchImpl = globalThis.fetch, log = console } = {}) {
+    Object.assign(this, { headless, sessionDir, chromePath, phone, password, proxy, betResponseTimeoutMs, fetchImpl, log });
     this.sel = loadSelectors(selectorsFile);
     this.browser = null;
     this.page = null;
@@ -317,6 +317,28 @@ export class BetikaClient {
   }
 
   /**
+   * Ask /v1/uo/bethistory for another period. From Node first (no browser cross-site rules; the
+   * login token is in the body, as the page sends it), else from the page without cookies.
+   */
+  async postHistory(page, req, body) {
+    const headers = { 'content-type': 'application/json', accept: 'application/json, text/plain, */*',
+      origin: 'https://www.betika.com', referer: 'https://www.betika.com/' };
+    for (const [k, v] of Object.entries(req.headers ?? {})) if (/^(authorization|x-[a-z0-9-]+)$/i.test(k)) headers[k] = v;
+    try {
+      const res = await this.fetchImpl(req.url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(20000) });
+      return { status: res.status, json: res.ok ? await res.json() : null, via: 'node' };
+    } catch (e) {
+      const r = await page.evaluate(async (url, h, b) => {
+        try {
+          const res = await fetch(url, { method: 'POST', headers: { 'content-type': h['content-type'], accept: h.accept }, body: JSON.stringify(b) });
+          return { status: res.status, json: res.ok ? await res.json() : null };
+        } catch (err) { return { status: 0, error: String(err.message ?? err) }; }
+      }, req.url, headers, body);
+      return { ...r, via: 'page', error: r.error ? `${e.message}; page: ${r.error}` : undefined };
+    }
+  }
+
+  /**
    * Open "My Bets" in the logged-in browser and return the JSON Betika loads there (read-only).
    * Also clicks a "Settled"/"All" tab if the page has one, to include finished bets.
    */
@@ -371,17 +393,8 @@ export class BetikaClient {
           for (const p of periods) {
             if (!p?.filter || String(p.filter) === String(body.period)) continue;
             for (let pg = 1; pg <= maxPages; pg++) {
-              const r = await page.evaluate(async (req, b) => {
-                try {
-                  // only ordinary headers: Chrome's request headers include pseudo-headers (":authority" ...)
-                  // that fetch rejects as "Invalid name". The login token travels in the body.
-                  const h = { 'content-type': 'application/json', accept: 'application/json, text/plain, */*' };
-                  for (const [k, v] of Object.entries(req.headers)) if (/^(authorization|x-[a-z0-9-]+)$/i.test(k)) h[k] = v;
-                  const res = await fetch(req.url, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
-                  return { status: res.status, json: res.ok ? await res.json() : null };
-                } catch (e) { return { status: 0, error: String(e.message ?? e) }; }
-              }, historyRequest, { ...body, period: p.filter, page: String(pg) });
-              this.lastHistoryReplays.push(`${p.filter}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}, ${r.json?.bets?.length ?? 0} bets`);
+              const r = await this.postHistory(page, historyRequest, { ...body, period: p.filter, page: String(pg) });
+              this.lastHistoryReplays.push(`${p.filter}: HTTP ${r.status} via ${r.via}${r.error ? ` ${r.error}` : ''}, ${r.json?.bets?.length ?? 0} bets`);
               const next = r.json;
               if (!next?.bets?.length) break;
               bodies.push(next);
