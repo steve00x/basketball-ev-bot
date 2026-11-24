@@ -3,3 +3,4 @@ node_modules/
 .betika-session/
 ev-bot-store.json*
 discover/
+oddspapi-cache.json

@@ -210,7 +210,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
         + (already.length ? ` (already bet: ${already.slice(0, 5).join('; ')}${already.length > 5 ? '; ...' : ''})` : ''));
     }
   }
-  return { opps: fresh, results };
+  return { opps: fresh, found: opps.length, results };
 }
 
 /**

@@ -73,6 +73,13 @@ export const DEFAULTS = Object.freeze({
   altTotalsMinEv: 0.04,
   altTotalsMaxDistance: 6,
   teamTotals: true,
+  // OddsPapi: second Pinnacle source, used only when The Odds API finds fewer than N +EV bets
+  oddsPapiKey: '',
+  oddsPapiWhenFewerThan: 3,
+  oddsPapiMinIntervalMinutes: 180,
+  oddsPapiRequestsPerScan: 1, // each request = up to 5 leagues
+  oddsPapiTournaments: [],
+  oddsPapiCachePath: 'oddspapi-cache.json',
   teamTotalsMinEv: 0.04,
   teamTotalsMaxDistance: 4,
   // Faster scans shortly before games start (0 = off). Only leagues with games in the window are fetched.
@@ -132,6 +139,12 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     altTotalsMinEv: num('ALT_TOTALS_MIN_EV', d.altTotalsMinEv),
     altTotalsMaxDistance: num('ALT_TOTALS_MAX_DISTANCE', d.altTotalsMaxDistance),
     teamTotals: bool('TEAM_TOTALS', d.teamTotals),
+    oddsPapiKey: str('ODDSPAPI_KEY', ''),
+    oddsPapiWhenFewerThan: num('ODDSPAPI_WHEN_FEWER_THAN', d.oddsPapiWhenFewerThan),
+    oddsPapiMinIntervalMinutes: num('ODDSPAPI_MIN_INTERVAL_MINUTES', d.oddsPapiMinIntervalMinutes),
+    oddsPapiRequestsPerScan: num('ODDSPAPI_REQUESTS_PER_SCAN', d.oddsPapiRequestsPerScan),
+    oddsPapiTournaments: list('ODDSPAPI_TOURNAMENTS', d.oddsPapiTournaments),
+    oddsPapiCachePath: str('ODDSPAPI_CACHE_PATH', d.oddsPapiCachePath),
     teamTotalsMinEv: num('TEAM_TOTALS_MIN_EV', d.teamTotalsMinEv),
     teamTotalsMaxDistance: num('TEAM_TOTALS_MAX_DISTANCE', d.teamTotalsMaxDistance),
     fastScanMinutes: num('FAST_SCAN_MINUTES', d.fastScanMinutes),
@@ -150,11 +163,12 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);
   if (s.altTotalsMinEv < 0 || s.altTotalsMinEv > 0.5) fail(`ALT_TOTALS_MIN_EV=${s.altTotalsMinEv} must be between 0 and 0.5`);
+  if (s.oddsPapiRequestsPerScan < 1 || s.oddsPapiRequestsPerScan > 10) fail('ODDSPAPI_REQUESTS_PER_SCAN must be 1..10');
   if (s.teamTotalsMinEv < 0 || s.teamTotalsMinEv > 0.5) fail(`TEAM_TOTALS_MIN_EV=${s.teamTotalsMinEv} must be between 0 and 0.5`);
   if (s.fastScanMinutes > 0 && s.fastPollSeconds < 60) fail('FAST_POLL_SECONDS must be at least 60');
   if (s.minEv < 0) fail(`MIN_EV=${s.minEv} is negative: that would bet on losing prices`);

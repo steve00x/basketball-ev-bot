@@ -65,6 +65,8 @@ export function scanEvent(event, s, now = new Date()) {
   let threeWay = null;
   let mainTotal = null;
   let mainSpread = null;
+  const sharpTotalPoints = new Set();
+  const sharpTeamTotals = new Set();
   for (const { market, description, books } of lines.values()) {
     const sharps = [...books.keys()].filter((b) => sharpSet.has(b));
     if (!sharps.length) continue;
@@ -76,6 +78,10 @@ export function scanEvent(event, s, now = new Date()) {
       const probs = om.devig(entries.map(([, o]) => o.price), s.devigMethod);
       entries.forEach(([k], i) => fair.set(k, (fair.get(k) ?? 0) + probs[i] / sharps.length));
     }
+
+    // Lines the sharp quotes exactly are priced from its real price, never from the models.
+    if (market === 'totals' && !description) for (const [, o] of books.get(sharps[0]).prices) sharpTotalPoints.add(o.point);
+    if (market === 'team_totals') for (const [, o] of books.get(sharps[0]).prices) sharpTeamTotals.add(`${description}|${o.point}`);
 
     // Remember the sharp main spread (home line, fair P(home covers)) for team totals.
     if (market === 'spreads' && !description) {
@@ -136,10 +142,10 @@ export function scanEvent(event, s, now = new Date()) {
   }
   if (threeWay) opps.push(...scanDerived(event, s, now, start, threeWay, sharpSet, targetSet));
   if (mainTotal && s.altTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
-    opps.push(...scanAltTotals(event, s, now, start, mainTotal, sharpSet, targetSet));
+    opps.push(...scanAltTotals(event, s, now, start, mainTotal, sharpSet, targetSet, sharpTotalPoints));
   }
   if (mainTotal && mainSpread && s.teamTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
-    opps.push(...scanTeamTotals(event, s, now, start, mainTotal, mainSpread, sharpSet, targetSet));
+    opps.push(...scanTeamTotals(event, s, now, start, mainTotal, mainSpread, sharpSet, targetSet, sharpTeamTotals));
   }
   return opps;
 }
@@ -205,7 +211,7 @@ export function fitTotalLadder(lines) {
  * the centre from Pinnacle's main line. A Betika line is +EV when Betika's centre is off
  * from Pinnacle's by more than its margin. Only lines near the main line, stricter MIN_EV.
  */
-function scanAltTotals(event, s, now, start, main, sharpSet, targetSet) {
+function scanAltTotals(event, s, now, start, main, sharpSet, targetSet, exactPoints = new Set()) {
   const out = [];
   for (const bm of event.bookmakers ?? []) {
     if (sharpSet.has(bm.key) || (targetSet.size && !targetSet.has(bm.key))) continue;
@@ -223,7 +229,7 @@ function scanAltTotals(event, s, now, start, main, sharpSet, targetSet) {
     const muSharp = main.line - fit.sigma * om.normInv(1 - main.pOver);
     const tax = s.winningsTax?.[bm.key] ?? 0;
     for (const l of ladder.values()) {
-      if (l.point === main.line || Math.abs(l.point - main.line) > s.altTotalsMaxDistance) continue;
+      if (exactPoints.has(l.point) || Math.abs(l.point - main.line) > s.altTotalsMaxDistance) continue;
       if (Math.abs(l.point % 1) !== 0.5) continue; // whole-number lines can push
       const pOver = 1 - om.normCdf((l.point - muSharp) / fit.sigma);
       for (const [name, price, p] of [['Over', l.over, pOver], ['Under', l.under, 1 - pOver]]) {
@@ -255,7 +261,7 @@ function scanAltTotals(event, s, now, start, main, sharpSet, targetSet) {
  * Each team's spread (sigma) comes from Betika's own ladder for that team. Lines within
  * TEAM_TOTALS_MAX_DISTANCE of the team's expected score, TEAM_TOTALS_MIN_EV threshold.
  */
-function scanTeamTotals(event, s, now, start, main, spread, sharpSet, targetSet) {
+function scanTeamTotals(event, s, now, start, main, spread, sharpSet, targetSet, exactTeamLines = new Set()) {
   const out = [];
   const sigmaMargin = event.sport_key === 'basketball_nba' ? 13 : 11;
   for (const bm of event.bookmakers ?? []) {
@@ -286,6 +292,7 @@ function scanTeamTotals(event, s, now, start, main, spread, sharpSet, targetSet)
       if (!fit || fit.r2 < 0.99 || fit.sigma < 5 || fit.sigma > 20) continue;
       const mu = centre[side];
       for (const o of outs) {
+        if (exactTeamLines.has(`${o.description}|${o.point}`)) continue; // Pinnacle prices it directly
         if (Math.abs(o.point % 1) !== 0.5 || Math.abs(o.point - mu) > s.teamTotalsMaxDistance) continue;
         if (o.price < s.minDecimalOdds || o.price > s.maxDecimalOdds) continue;
         const pOver = 1 - om.normCdf((o.point - mu) / fit.sigma);

@@ -10,6 +10,8 @@ import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '.
 import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
+import { OddsPapi, OddsPapiError, mergeEvents } from '../src/oddsPapi.js';
+import { teamSimilarity } from '../src/teamMatch.js';
 
 const HELP = `Usage: ev-bot <command> [options]
 
@@ -17,6 +19,7 @@ Commands:
   scan        find +EV bets and bet on Betika if BETIKA_ENABLED=true      [default]
   check       real-site self-test: fills a Betika bet slip (never places it)
   sports      which of your SPORTS have Pinnacle prices now, Betika counts, credit cost
+  oddspapi    check your OddsPapi key: quota, leagues and the Pinnacle markets it returns
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
   balance     print the Betika account balance
@@ -100,6 +103,11 @@ async function scan() {
     + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`
     + ` | fast scans ${s.fastScanMinutes > 0 ? `every ${Math.round(s.fastPollSeconds / 60)} min within ${s.fastScanMinutes} min of ${s.fastScanSports.join('/')} games` : 'off'}`);
   try {
+    let papi = null, lastPapi = 0;
+    if (s.oddsPapiKey) {
+      papi = new OddsPapi(s.oddsPapiKey, { cachePath: s.oddsPapiCachePath, log });
+      log.info(`oddspapi: on - used when The Odds API finds fewer than ${s.oddsPapiWhenFewerThan} +EV bets, at most every ${s.oddsPapiMinIntervalMinutes} min`);
+    }
     const fastGroups = s.fastScanSports;
     let lastFull = 0;
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
@@ -115,7 +123,22 @@ async function scan() {
           log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
           events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
         }
-        await runCycle({ events, s, store, notifier, betika: feed, executor, log });
+        const r = await runCycle({ events, s, store, notifier, betika: feed, executor, log });
+        // Second source: only when The Odds API found too few bets, and not more often than
+        // ODDSPAPI_MIN_INTERVAL_MINUTES (OddsPapi's free plan is 250 requests a month).
+        if (papi && kind === 'full' && r.found < s.oddsPapiWhenFewerThan && !papi.quotaGone
+            && Date.now() - lastPapi >= s.oddsPapiMinIntervalMinutes * 60_000) {
+          lastPapi = Date.now();
+          try {
+            log.info(`oddspapi: The Odds API found ${r.found} +EV (< ${s.oddsPapiWhenFewerThan}), adding Pinnacle's extra lines from OddsPapi`);
+            const extra = await papi.fetchEvents(s, sportGroupsOf(s.sports));
+            const m = mergeEvents(events, extra, { similarity: teamSimilarity, groupOf: (k) => sportGroup(k) });
+            log.info(`oddspapi: ${m.joined} games got extra Pinnacle lines, ${m.added} new games`);
+            await runCycle({ events: m.events, s, store, notifier, betika: feed, executor, log });
+          } catch (e) {
+            log.warn(`oddspapi: ${e instanceof OddsPapiError ? e.message : (e.stack ?? e)}`);
+          }
+        }
       } catch (e) {
         log.error(`cycle failed: ${e.stack ?? e}`);
       }
@@ -136,6 +159,10 @@ async function withBrowser(fn, overrides) {
   const client = makeClient(overrides);
   try { return await fn(client); } finally { await client.close(); }
 }
+
+/** Sport groups ("soccer", "basketball", ...) named or implied by SPORTS. */
+const sportGroupsOf = (entries) => [...new Set(entries.map((e) => e.toLowerCase())
+  .map((e) => (SPORTS[e] ? e : e.startsWith('soccer') ? 'soccer' : sportGroup(e))).filter(Boolean))];
 
 const fmtMatch = (m) => `${m.start.toISOString().slice(0, 16).replace('T', ' ')}Z  ${m.competition.padEnd(22)} `
   + `${`${m.home} v ${m.away}`.padEnd(44)} winner ${m.winner ? (m.draw ? [m.winner[0], m.draw, m.winner[1]] : m.winner).map((o) => o.toFixed(2)).join(' / ') : '-'}`
@@ -166,6 +193,30 @@ const commands = {
     console.log(`\nTotal: ~${cost} credits per scan, ~${perDay}/day at POLL_SECONDS=${s.pollSeconds}`
       + ` (credits remaining: ${api.requestsRemaining ?? 'unknown'})`);
     return 0;
+  },
+
+  // Checks OddsPapi with your key: quota, sports, chosen leagues, and one odds request.
+  oddspapi: async () => {
+    if (!s.oddsPapiKey) { log.error('set ODDSPAPI_KEY in .env first'); return 1; }
+    const papi = new OddsPapi(s.oddsPapiKey, { cachePath: s.oddsPapiCachePath, log });
+    let acc;
+    try { acc = await papi.account(); } catch (e) {
+      if (!(e instanceof OddsPapiError)) throw e;
+      log.error(`oddspapi: ${e.message}${e.code === 'INVALID_API_KEY' ? ' - check ODDSPAPI_KEY in .env' : ''}`);
+      return 1;
+    }
+    console.log(`account: ${JSON.stringify(acc).slice(0, 400)}`);
+    const groups = sportGroupsOf(s.sports);
+    const bySport = await papi.sportGroups(groups);
+    console.log(`sports: ${Object.entries(bySport).map(([id, g]) => `${g}=${id}`).join(', ') || 'none of your SPORTS found'}`);
+    const events = await papi.fetchEvents(s, groups);
+    const count = (e, key) => e.bookmakers[0].markets.find((m) => m.key === key)?.outcomes.length ?? 0;
+    for (const e of events.slice(0, 15)) {
+      console.log(`${e.commence_time.slice(0, 16)}  ${e.sport_key.padEnd(24)} ${`${e.home_team} v ${e.away_team}`.padEnd(46)}`
+        + ` h2h ${count(e, 'h2h')}  totals ${count(e, 'totals')}  team totals ${count(e, 'team_totals')}`);
+    }
+    console.log(`${events.length} events | OddsPapi requests used by this check: ${papi.requestsUsed}`);
+    return events.length ? 0 : 1;
   },
 
   odds: async () => {
