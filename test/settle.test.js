@@ -59,3 +59,16 @@ test('settle: one scores call per sport, real bets and first dry run only, total
   assert.deepEqual([t.real.won, t.real.lost, t.real.profit, t.real.roi, t.real.pending], [2, 0, 80, 1, 1]);
   assert.deepEqual([t.dryRun.settled, t.dryRun.profit], [1, -40]); // the repeated dry run counted once
 });
+
+test('profit curve: settled bets in game order, running actual vs expected, Betika payout first', async () => {
+  const { profitCurve } = await import('../src/settle.js');
+  const bet = (o) => ({ live: true, status: 'placed', stake: 40, ev: 0.05, selection: 'X', matchup: 'A @ B', ...o });
+  const c = profitCurve([
+    bet({ grade: { commenceTime: '2026-11-24T20:00:00Z' }, result: 'lost', profit: -40 }),
+    bet({ grade: { commenceTime: '2026-11-23T20:00:00Z' }, result: 'won', profit: 46, betikaStatus: 'won', betikaProfit: 36.8 }),
+    bet({ grade: { commenceTime: '2026-11-25T20:00:00Z' } }),                      // not settled: left out
+    bet({ status: 'dry_run', live: false, key: 'k', grade: { commenceTime: '2026-11-24T20:00:00Z' }, result: 'won', profit: 40 }),
+  ]);
+  assert.deepEqual(c.real.map((p) => [p.n, p.result, p.actual, p.expected]), [[1, 'won', 36.8, 2], [2, 'lost', -3.2, 4]]);
+  assert.deepEqual(c.dryRun.map((p) => p.actual), [40]);
+});
