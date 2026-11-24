@@ -78,7 +78,7 @@ export class BetikaExecutor {
     this.store.recordBet({
       key: dedupeKey(opp), at: new Date().toISOString(), matchup: matchup(opp),
       selection: selection(opp), stake, minOdds: bet.minOdds, expectedOdds: opp.decimal,
-      fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...result,
+      fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}), ...result,
     });
 
     const ticket = result.betId ? ` ticket ${result.betId}` : '';

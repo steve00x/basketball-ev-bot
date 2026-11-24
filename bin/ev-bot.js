@@ -10,6 +10,7 @@ import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '.
 import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
+import { botState, startDashboard, summarizeOpps } from '../src/dashboard.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
 import { teamSimilarity } from '../src/teamMatch.js';
 
@@ -20,6 +21,7 @@ Commands:
   check       real-site self-test: fills a Betika bet slip (never places it)
   sports      which of your SPORTS have Pinnacle prices now, Betika counts, credit cost
   oddspapi    check your OddsPapi key: quota, leagues and the Pinnacle markets it returns
+  dashboard   open the dashboard on your bet log without scanning (scan also serves it)
   leagues S [text]  list OddsPapi league ids for sport S, e.g. leagues basketball euroleague
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
@@ -105,6 +107,17 @@ async function scan() {
     + ` | live betting ${s.liveBetting ? `${s.liveBetsLive && s.betikaLive ? 'REAL' : 'dry run'} (${s.liveSports.join('/')}, every ${s.livePollSeconds}s, min ${(Math.max(s.liveMinEv, s.minEv) * 100).toFixed(1)}%)` : 'off'}`
     + ` | fast scans ${s.fastScanMinutes > 0 ? `every ${Math.round(s.fastPollSeconds / 60)} min within ${s.fastScanMinutes} min of ${s.fastScanSports.join('/')} games` : 'off'}`);
   try {
+    if (s.dashboard) startDashboard({ store, s, port: s.dashboardPort, log });
+    Object.assign(botState.mode, { betikaLive: s.betikaLive, liveBetting: s.liveBetting, liveBetsLive: s.liveBetsLive,
+      minEv: s.minEv, tax: s.winningsTax.betika, sports: s.sports });
+    const track = (r, k) => {
+      if (!r) return;
+      botState.scans++;
+      botState.lastScan = { at: new Date().toISOString(), kind: k, found: r.found };
+      botState.opportunities = summarizeOpps(r.all ?? []);
+      botState.closest = r.closest;
+      botState.credits = api.requestsRemaining;
+    };
     let papi = null, lastPapi = 0;
     if (s.oddsPapiKey) {
       papi = new OddsPapi(s.oddsPapiKey, { cachePath: s.oddsPapiCachePath, log });
@@ -126,13 +139,15 @@ async function scan() {
           events = await fetchLiveEvents(api, s, log);
           lastLive = Date.now();
           liveActive = events.length > 0;
-          if (liveActive) await runCycle({ events, s, store, notifier, betika: feed, executor, log, live: true });
+          if (liveActive) track(await runCycle({ events, s, store, notifier, betika: feed, executor, log, live: true }), 'live');
+          else botState.credits = api.requestsRemaining;
           events = null;
         } else {
           log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
           events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
         }
         const r = events ? await runCycle({ events, s, store, notifier, betika: feed, executor, log }) : { found: Infinity };
+        if (events) track(r, kind);
         // Second source: only when The Odds API found too few bets, and not more often than
         // ODDSPAPI_MIN_INTERVAL_MINUTES (OddsPapi's free plan is 250 requests a month).
         if (papi && kind === 'full' && r.found < s.oddsPapiWhenFewerThan && !papi.quotaGone
@@ -143,7 +158,8 @@ async function scan() {
             const extra = await papi.fetchEvents(s, sportGroupsOf(s.sports));
             const m = mergeEvents(events, extra, { similarity: teamSimilarity, groupOf: (k) => sportGroup(k) });
             log.info(`oddspapi: ${m.joined} games got extra Pinnacle lines, ${m.added} new games`);
-            await runCycle({ events: m.events, s, store, notifier, betika: feed, executor, log });
+            track(await runCycle({ events: m.events, s, store, notifier, betika: feed, executor, log }), 'full + oddspapi');
+            botState.oddsPapi = { requestsUsedThisRun: papi.requestsUsed };
           } catch (e) {
             log.warn(`oddspapi: ${e instanceof OddsPapiError ? e.message : (e.stack ?? e)}`);
           }
@@ -160,6 +176,7 @@ async function scan() {
         if (liveWait < plan.waitMs) Object.assign(plan, { kind: 'live', waitMs: liveWait });
       }
       kind = plan.kind;
+      botState.nextScan = { kind: plan.kind, at: new Date(Date.now() + plan.waitMs).toISOString() };
       if (plan.waitMs >= 60_000) log.info(`next ${plan.kind} scan in ${Math.round(plan.waitMs / 60_000)} min`);
       for (let t = 0; t < plan.waitMs / 1000 && !stopping; t++) await sleep(1000);
     }
@@ -234,6 +251,16 @@ const commands = {
     }
     console.log(`${events.length} events | OddsPapi requests used by this check: ${papi.requestsUsed}`);
     return events.length ? 0 : 1;
+  },
+
+  // The dashboard on its own (bet history), without scanning: http://localhost:DASHBOARD_PORT
+  dashboard: async () => {
+    const store = new Store(s.storePath, { log });
+    Object.assign(botState.mode, { betikaLive: s.betikaLive, liveBetting: s.liveBetting, liveBetsLive: s.liveBetsLive,
+      minEv: s.minEv, tax: s.winningsTax.betika });
+    startDashboard({ store, s, port: s.dashboardPort, log });
+    log.info('showing the saved bet log only (no scanning) - press Ctrl+C to stop');
+    await new Promise(() => {});
   },
 
   // Every OddsPapi league of a sport with its id, optionally filtered by name, e.g.

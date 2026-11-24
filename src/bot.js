@@ -219,10 +219,12 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   if (s.betikaFixedStake > 0) for (const o of opps) if (o.book === 'betika') o.stake = s.betikaFixedStake; // alerts show the real stake
   const fresh = opps.filter((o) => store.shouldAlert(dedupeKey(o), o.ev, s.realertEvDelta));
   log.info(`found ${opps.length} +EV ${live ? 'LIVE ' : ''}bets (${fresh.length} new)`);
+  let closest = null;
   if (!opps.length) {
     // Show the closest call so you can see prices really are being compared.
     const [best] = scanEvents(events, { ...scanSettings, minEv: -1 });
     if (best) {
+      closest = `${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal}: ${(best.ev * 100).toFixed(1)}% EV`;
       log.info(`closest: ${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal} = `
         + `${(best.ev * 100).toFixed(1)}% EV after tax (${((best.fairProb * best.decimal + (best.pushProb ?? 0) - 1) * 100).toFixed(1)}% before tax) `
         + `vs fair ${((1 - (best.pushProb ?? 0)) / best.fairProb).toFixed(2)} (need +${(s.minEv * 100).toFixed(1)}%)`);
@@ -244,7 +246,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
         + (already.length ? ` (already bet: ${already.slice(0, 5).join('; ')}${already.length > 5 ? '; ...' : ''})` : ''));
     }
   }
-  return { opps: fresh, found: opps.length, results };
+  return { opps: fresh, found: opps.length, all: opps, closest, results };
 }
 
 /**

@@ -73,6 +73,8 @@ export const DEFAULTS = Object.freeze({
   altTotalsMinEv: 0.04,
   altTotalsMaxDistance: 6,
   teamTotals: true,
+  dashboard: true,
+  dashboardPort: 3000,
   // In-play betting (Pinnacle live prices from The Odds API vs Betika's live feed)
   liveBetting: false,          // scan games in progress
   liveBetsLive: false,         // place real in-play bets (dry run otherwise, even if BETIKA_LIVE=true)
@@ -149,6 +151,8 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     altTotalsMinEv: num('ALT_TOTALS_MIN_EV', d.altTotalsMinEv),
     altTotalsMaxDistance: num('ALT_TOTALS_MAX_DISTANCE', d.altTotalsMaxDistance),
     teamTotals: bool('TEAM_TOTALS', d.teamTotals),
+    dashboard: bool('DASHBOARD', d.dashboard),
+    dashboardPort: num('DASHBOARD_PORT', d.dashboardPort),
     liveBetting: bool('LIVE_BETTING', d.liveBetting),
     liveBetsLive: bool('LIVE_BETS_LIVE', d.liveBetsLive),
     liveSports: list('LIVE_SPORTS', d.liveSports).map((x) => x.toLowerCase()),
