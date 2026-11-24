@@ -23,3 +23,20 @@ test('dashboard numbers: today vs limits, balance, expected profit; dry runs nev
   assert.equal(d.bets[1].inPlay, true);
   assert.equal(d.bets[0].message, 'Odds have changed');
 });
+
+test('dashboard balance: the newer of the last bet and the balance read from Betika, with its time and source', () => {
+  const now = new Date('2026-11-24T20:00:00Z');
+  const store = new Store(':memory:');
+  store.data.bets = [{ at: '2026-11-24T18:00:00Z', live: true, status: 'placed', stake: 40, betId: 'A', balanceAfter: 1233.79 }];
+  const s = makeSettings({});
+  const st = { mode: {}, opportunities: [] };
+  let d = dashboardData(store, s, st, now);
+  assert.deepEqual([d.balance, d.balanceSource, d.balanceAt], [1233.79, 'bet', '2026-11-24T18:00:00Z']);
+  store.data.balance = { amount: 1310.5, at: '2026-11-24T19:00:00Z' }; // a win paid in since
+  d = dashboardData(store, s, st, now);
+  assert.deepEqual([d.balance, d.balanceSource], [1310.5, 'read']);
+  store.data.bets.push({ at: '2026-11-24T19:30:00Z', live: true, status: 'placed', stake: 40, betId: 'B', balanceAfter: 1270.5 });
+  d = dashboardData(store, s, st, now);
+  assert.deepEqual([d.balance, d.balanceSource], [1270.5, 'bet']); // a bet after the read is newer
+  assert.equal(dashboardData(new Store(':memory:'), s, st, now).balance, null);
+});

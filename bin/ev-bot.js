@@ -102,6 +102,7 @@ async function scan() {
     feed = new BetikaAPI();
     client = makeClient();
     if (s.betikaLive) await client.ensureLoggedIn();
+    if (s.betikaLive) await refreshBalance(client, store, log);
     executor = new BetikaExecutor(s, client, store, { log, notify: (t) => notifier.sendText(t) });
     log.info(`betika: ${s.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - bet slips are filled, never submitted'}`
       + ` | winnings tax ${(s.winningsTax.betika * 100).toFixed(0)}%`);
@@ -180,6 +181,8 @@ async function scan() {
         if (client && s.betikaLive && s.betikaHistory) {
           try { await checkBetikaHistory(client, store, log); } catch (e) { log.warn(`betika history: ${e.message.split('\n')[0]}`); }
         }
+        // the real balance (winnings paid in, deposits, bets placed by hand) for the dashboard
+        if (client && s.betikaLive) await refreshBalance(client, store, log);
       }
       if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
       const plan = nextScanPlan({ now: Date.now(), lastFull, s, upcoming });
@@ -204,6 +207,19 @@ async function scan() {
 async function withBrowser(fn, overrides) {
   const client = makeClient(overrides);
   try { return await fn(client); } finally { await client.close(); }
+}
+
+/** Read the account balance from Betika's page and keep it for the dashboard. Never throws. */
+async function refreshBalance(client, store, log) {
+  try {
+    const amount = await client.readBalance();
+    if (amount == null) return log.warn('betika balance: not shown on the page - kept the last known figure');
+    store.data.balance = { amount, at: new Date().toISOString() };
+    store.save();
+    log.info(`betika balance: KES ${amount}`);
+  } catch (e) {
+    log.warn(`betika balance: ${e.message.split('\n')[0]}`);
+  }
 }
 
 /** Read Betika's My Bets and record its status/payout on our placed bets. Returns the raw bodies. */

@@ -262,3 +262,17 @@ test('games already started are neither matched nor reported as unmatched', () =
   const r = attachBetikaOdds([ev('live', '2026-11-24T19:45:00Z'), ev('later', '2026-11-25T19:45:00Z')], [], now);
   assert.deepEqual(r.unmatched, ['Wrexham AFC @ Bristol City (not on Betika right now)']); // only the upcoming one
 });
+
+test('readBalance: reloads the home page and waits for the header to show a number', async () => {
+  const { BetikaClient } = await import('../src/betika/client.js');
+  const c = Object.create(BetikaClient.prototype);
+  c.sel = { urls: { home: 'H' } };
+  const visited = [];
+  let reads = 0;
+  c.goto = async (u) => { visited.push(u); };
+  c.balance = async () => (++reads < 2 ? null : 1310.5); // header fills in a moment after load
+  assert.equal(await c.readBalance({ waitMs: 5000 }), 1310.5);
+  assert.deepEqual(visited, ['H']);
+  c.balance = async () => null;
+  assert.equal(await c.readBalance({ waitMs: 0 }), null); // never shown: null, not a guess
+});

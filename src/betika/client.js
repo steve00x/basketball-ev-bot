@@ -161,6 +161,20 @@ export class BetikaClient {
     return el ? toNum(await el.evaluate((n) => n.textContent)) : null;
   }
 
+  /**
+   * Fresh balance straight from Betika: reload the home page (the header shows the account balance)
+   * and wait for a number to appear. Read-only. Returns a number or null.
+   */
+  async readBalance({ waitMs = 15000 } = {}) {
+    await this.goto(this.sel.urls.home);
+    const until = Date.now() + waitMs;
+    for (;;) {
+      const v = await this.balance().catch(() => null);
+      if (v != null || Date.now() >= until) return v;
+      await sleep(1000);
+    }
+  }
+
   async slipCount() {
     return (await this.page.$$(this.sel.betslip.selection)).length;
   }

@@ -18,7 +18,12 @@ export function dashboardData(store, s, state = botState, now = new Date()) {
   const today = bets.filter((b) => new Date(b.at) >= midnight);
   const placedToday = today.filter((b) => b.live && LIVE_STATUSES.has(b.status));
   const count = (st) => today.filter((b) => b.status === st).length;
-  const lastBalance = [...bets].reverse().find((b) => b.balanceAfter != null)?.balanceAfter ?? null;
+  // the newer of: the balance Betika returned with the last confirmed bet, or the one read from its page
+  const lastBet = [...bets].reverse().find((b) => b.balanceAfter != null);
+  const read = store.data.balance;
+  const balance = read?.amount != null && (!lastBet || new Date(read.at) >= new Date(lastBet.at))
+    ? { amount: read.amount, at: read.at, source: 'read' }
+    : lastBet ? { amount: lastBet.balanceAfter, at: lastBet.at, source: 'bet' } : null;
   const placedAll = bets.filter((b) => b.live && b.status === 'placed');
   return {
     now: now.toISOString(),
@@ -45,7 +50,9 @@ export function dashboardData(store, s, state = botState, now = new Date()) {
       staked: placedAll.reduce((t, b) => t + (b.stake ?? 0), 0),
       expectedProfit: placedAll.reduce((t, b) => t + (b.stake ?? 0) * (b.ev ?? 0), 0),
     },
-    balance: lastBalance,
+    balance: balance?.amount ?? null,
+    balanceAt: balance?.at ?? null,
+    balanceSource: balance?.source ?? null,
     results: resultsSummary(bets),
     curve: profitCurve(bets),
     opportunities: state.opportunities,
@@ -143,7 +150,7 @@ const el = (tag, text, cls) => { const e = document.createElement(tag); if (text
 const kes = (n) => 'KES ' + Math.round(n ?? 0).toLocaleString();
 const pct = (x) => (x == null ? '' : (x >= 0 ? '+' : '') + (x * 100).toFixed(1) + '%');
 const time = (t) => t ? new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-const ago = (t) => { if (!t) return 'never'; const s = Math.round((Date.now() - new Date(t)) / 1000); return s < 90 ? s + 's ago' : Math.round(s / 60) + ' min ago'; };
+const ago = (t) => { if (!t) return 'never'; const s = Math.round((Date.now() - new Date(t)) / 1000); return s < 90 ? s + 's ago' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 172800 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago'; };
 function table(t, cols, rows, empty) {
   t.replaceChildren();
   if (!rows.length) { const tr = el('tr'); const td = el('td', empty, 'empty'); td.colSpan = cols.length; tr.append(td); t.append(tr); return; }
@@ -176,7 +183,8 @@ async function refresh() {
     tile('Bets today', t.placed + ' / ' + t.betLimit, t.dryRuns + ' dry runs · ' + t.rejected + ' rejected · ' + t.priceMoved + ' price moved', t.placed / (t.betLimit || 1)),
     tile('Staked today', kes(t.staked), 'limit ' + kes(t.stakeLimit), t.staked / (t.stakeLimit || 1)),
     tile('Expected profit today', kes(t.expectedProfit), 'stake × EV of placed bets'),
-    tile('Betika balance', d.balance != null ? kes(d.balance) : '–', 'from the last confirmed bet'),
+    tile('Betika balance', d.balance != null ? kes(d.balance) : '–',
+      d.balance == null ? 'not read yet' : (d.balanceSource === 'read' ? 'read from Betika ' : 'after the last bet, ') + ago(d.balanceAt)),
     tile('Odds API credits', d.credits ?? '–', 'remaining'),
     tile('All time', d.allTime.placed + ' bets', kes(d.allTime.staked) + ' staked · ' + kes(d.allTime.expectedProfit) + ' expected'),
     resultTile('Actual profit (real bets)', d.results.real),
