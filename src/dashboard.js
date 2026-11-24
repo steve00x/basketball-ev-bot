@@ -1,5 +1,7 @@
 // Local dashboard: http://localhost:3000 while the bot runs. Listens on 127.0.0.1 only.
+import crypto from 'node:crypto';
 import http from 'node:http';
+import os from 'node:os';
 import { dedupeKey, matchup, selection } from './scanner.js';
 import { profitCurve, resultsSummary } from './settle.js';
 
@@ -74,23 +76,57 @@ export function summarizeOpps(opps) {
   }));
 }
 
-/** reload: re-read the bet log on each request (for the standalone dashboard next to a scan in another window). */
-export function startDashboard({ store, s, port = 3000, log = console, state = botState, reload = false }) {
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+const sameKey = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
+const cookieKey = (req) => (req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).find(([k]) => k === 'evbot_key')?.[1];
+
+/**
+ * Serve the dashboard. On this PC only (127.0.0.1) unless DASHBOARD_HOST opens it to the network,
+ * which needs DASHBOARD_KEY: the phone opens /?key=... once, gets a cookie, and is let in after that.
+ * reload: re-read the bet log on each request (for the standalone dashboard next to a scan in another window).
+ */
+export function startDashboard({ store, s, port = 3000, log = console, state = botState, reload = false,
+  host = s?.dashboardHost || '127.0.0.1', key = s?.dashboardKey || '' }) {
+  if (!LOCAL_HOSTS.has(host) && String(key).length < 16) {
+    log.error?.('dashboard: DASHBOARD_HOST opens it to other devices, so DASHBOARD_KEY must be set (16+ random characters) - showing it on this PC only');
+    host = '127.0.0.1';
+  }
   const server = http.createServer((req, res) => {
-    if (req.url === '/api/state') {
+    const url = new URL(req.url, 'http://x');
+    if (key) {
+      const given = url.searchParams.get('key');
+      if (given != null) {
+        if (!sameKey(given, key)) { res.writeHead(401, { 'content-type': 'text/plain' }); return setTimeout(() => res.end('wrong key'), 1000); }
+        res.writeHead(303, { location: '/', 'set-cookie': `evbot_key=${encodeURIComponent(key)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000` });
+        return res.end();
+      }
+      const c = cookieKey(req);
+      if (!c || !sameKey(decodeURIComponent(c), key)) {
+        res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' });
+        return res.end('EV Bot dashboard: open this address with ?key=<your DASHBOARD_KEY> at the end, once.');
+      }
+    }
+    if (url.pathname === '/api/state') {
       if (reload) store.reload();
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
       return res.end(JSON.stringify(dashboardData(store, s, state)));
     }
-    if (req.url === '/' || req.url === '/index.html') {
+    if (url.pathname === '/' || url.pathname === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(PAGE);
     }
-    if (req.url === '/favicon.ico') { res.writeHead(204); return res.end(); }
+    if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
     res.writeHead(404); res.end('not found');
   });
   server.on('error', (e) => log.warn?.(`dashboard: ${e.code === 'EADDRINUSE' ? `port ${port} is busy - set DASHBOARD_PORT` : e.message}`));
-  server.listen(port, '127.0.0.1', () => log.info?.(`dashboard: http://localhost:${port}`));
+  server.listen(port, host, () => {
+    const keyNote = key ? '/?key=<DASHBOARD_KEY>' : '';
+    log.info?.(`dashboard: http://localhost:${port}${keyNote}`);
+    if (!LOCAL_HOSTS.has(host)) {
+      const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
+      for (const ip of ips) log.info?.(`dashboard on your phone (same Wi-Fi): http://${ip}:${port}${keyNote}`);
+    }
+  });
   return server;
 }
 

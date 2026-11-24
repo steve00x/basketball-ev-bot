@@ -78,6 +78,8 @@ export const DEFAULTS = Object.freeze({
   betikaHistory: true,          // also read Betika's My Bets for placed bets (status and payout)
   dashboard: true,
   dashboardPort: 3000,
+  dashboardHost: '127.0.0.1', // 0.0.0.0 = also reachable from phones on the same Wi-Fi (needs DASHBOARD_KEY)
+  dashboardKey: '',
   // In-play betting (Pinnacle live prices from The Odds API vs Betika's live feed)
   liveBetting: false,          // scan games in progress
   liveBetsLive: false,         // place real in-play bets (dry run otherwise, even if BETIKA_LIVE=true)
@@ -159,6 +161,8 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     betikaHistory: bool('BETIKA_HISTORY', d.betikaHistory),
     dashboard: bool('DASHBOARD', d.dashboard),
     dashboardPort: num('DASHBOARD_PORT', d.dashboardPort),
+    dashboardHost: str('DASHBOARD_HOST', d.dashboardHost),
+    dashboardKey: str('DASHBOARD_KEY', d.dashboardKey),
     liveBetting: bool('LIVE_BETTING', d.liveBetting),
     liveBetsLive: bool('LIVE_BETS_LIVE', d.liveBetsLive),
     liveSports: list('LIVE_SPORTS', d.liveSports).map((x) => x.toLowerCase()),

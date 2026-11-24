@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dashboardData } from '../src/dashboard.js';
+import { dashboardData, startDashboard } from '../src/dashboard.js';
 import { makeSettings } from '../src/config.js';
 import { Store } from '../src/store.js';
 
@@ -39,4 +39,34 @@ test('dashboard balance: the newer of the last bet and the balance read from Bet
   d = dashboardData(store, s, st, now);
   assert.deepEqual([d.balance, d.balanceSource], [1270.5, 'bet']); // a bet after the read is newer
   assert.equal(dashboardData(new Store(':memory:'), s, st, now).balance, null);
+});
+
+test('dashboard access: this PC only without a key; with a key, ?key= once sets a cookie, wrong or missing key is refused', async () => {
+  const quiet = { info() {}, warn() {}, error() {} };
+  const s = makeSettings({});
+  const listen = (srv) => new Promise((r) => srv.on('listening', () => r(srv.address())));
+  // network host without a key: falls back to this PC only
+  const errors = [];
+  let srv = startDashboard({ store: new Store(':memory:'), s, port: 0, log: { ...quiet, error: (m) => errors.push(m) }, host: '0.0.0.0', key: '' });
+  assert.equal((await listen(srv)).address, '127.0.0.1');
+  assert.match(errors[0], /DASHBOARD_KEY/);
+  srv.close();
+
+  const key = 'k3y-0123456789abcdef';
+  srv = startDashboard({ store: new Store(':memory:'), s, port: 0, log: quiet, host: '127.0.0.1', key });
+  const base = `http://127.0.0.1:${(await listen(srv)).port}`;
+  try {
+    assert.equal((await fetch(`${base}/`)).status, 401);
+    assert.equal((await fetch(`${base}/api/state`)).status, 401);
+    assert.equal((await fetch(`${base}/?key=wrong`, { redirect: 'manual' })).status, 401);
+    const ok = await fetch(`${base}/?key=${key}`, { redirect: 'manual' });
+    assert.equal(ok.status, 303);
+    const cookie = ok.headers.get('set-cookie').split(';')[0];
+    assert.match(ok.headers.get('set-cookie'), /HttpOnly/);
+    const page = await fetch(`${base}/`, { headers: { cookie } });
+    assert.equal(page.status, 200);
+    const api = await fetch(`${base}/api/state`, { headers: { cookie } });
+    assert.equal(api.status, 200);
+    assert.ok(Array.isArray((await api.json()).bets));
+  } finally { srv.close(); }
 });
