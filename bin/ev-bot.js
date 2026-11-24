@@ -20,6 +20,7 @@ Commands:
   check       real-site self-test: fills a Betika bet slip (never places it)
   sports      which of your SPORTS have Pinnacle prices now, Betika counts, credit cost
   oddspapi    check your OddsPapi key: quota, leagues and the Pinnacle markets it returns
+  leagues S [text]  list OddsPapi league ids for sport S, e.g. leagues basketball euroleague
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
   balance     print the Betika account balance
@@ -219,6 +220,33 @@ const commands = {
     }
     console.log(`${events.length} events | OddsPapi requests used by this check: ${papi.requestsUsed}`);
     return events.length ? 0 : 1;
+  },
+
+  // Every OddsPapi league of a sport with its id, optionally filtered by name, e.g.
+  //   node bin/ev-bot.js leagues basketball euroleague
+  leagues: async () => {
+    if (!s.oddsPapiKey) { log.error('set ODDSPAPI_KEY in .env first'); return 1; }
+    const sport = (positionals[1] ?? 'basketball').toLowerCase();
+    const search = positionals.slice(2).join(' ').toLowerCase();
+    const papi = new OddsPapi(s.oddsPapiKey, { cachePath: s.oddsPapiCachePath, log });
+    try {
+      const bySport = await papi.sportGroups([sport]);
+      const sportId = Object.keys(bySport)[0];
+      if (!sportId) { log.error(`OddsPapi has no sport "${sport}" - use one of: ${Object.keys(SPORTS).join(', ')}`); return 1; }
+      const list = (await papi.tournaments(sportId))
+        .filter((t) => !search || `${t.tournamentName} ${t.categoryName}`.toLowerCase().includes(search))
+        .sort((a, b) => (b.upcomingFixtures ?? 0) - (a.upcomingFixtures ?? 0) || (b.futureFixtures ?? 0) - (a.futureFixtures ?? 0));
+      for (const t of list) {
+        console.log(`${String(t.tournamentId).padStart(7)}  ${`${t.categoryName}: ${t.tournamentName}`.padEnd(50)}`
+          + ` upcoming ${t.upcomingFixtures ?? 0}, later ${t.futureFixtures ?? 0}`);
+      }
+      log.info(`${list.length} ${sport} leagues${search ? ` matching "${search}"` : ''} | OddsPapi requests used: ${papi.requestsUsed}`);
+      return 0;
+    } catch (e) {
+      if (!(e instanceof OddsPapiError)) throw e;
+      log.error(`oddspapi: ${e.message}`);
+      return 1;
+    }
   },
 
   odds: async () => {
