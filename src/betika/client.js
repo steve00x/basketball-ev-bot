@@ -320,18 +320,28 @@ export class BetikaClient {
     const page = await this.start();
     if (!(await this.isLoggedIn().catch(() => false))) await this.ensureLoggedIn();
     const bodies = [];
+    this.lastHistoryCalls = []; // API paths My Bets called (no query values), to see where bets come from
     const onResponse = async (res) => {
       try {
-        if (!/api\.betika\.com/i.test(res.url()) || res.request().method() !== 'GET') return;
+        const host = new URL(res.url()).hostname;
+        if (!host.endsWith('betika.com') || ['www.betika.com', 'cdn.betika.com', 'media.betika.com'].includes(host)) return;
         if (/\/uo\/(matches|sport|totalMatches)|\/v1\/sports/.test(res.url())) return; // odds lists, not bets
+        const u = new URL(res.url());
+        this.lastHistoryCalls.push(`${res.request().method()} ${res.status()} ${u.host}${u.pathname}`);
+        // account/feature/IP services are not bet data (and may hold personal details): never read
+        if (/^(userinfo|ip|ke-experiment-service)\./.test(host)) return;
         const ct = res.headers()['content-type'] ?? '';
         if (ct.includes('json')) bodies.push(await res.json());
       } catch { /* body gone after navigation */ }
     };
     page.on('response', onResponse);
     try {
-      await this.goto(this.sel.urls.myBets ?? 'https://www.betika.com/en-ke/mybets');
-      await sleep(waitMs);
+      // My Bets has no bet slip panel, so don't wait for the usual page-ready marker: load it and
+      // give Betika time to fetch the bets (we read its data, not the page).
+      await page.goto(this.sel.urls.myBets ?? 'https://www.betika.com/en-ke/mybets', { waitUntil: 'domcontentloaded', timeout: 45000 })
+        .catch((e) => { if (!/ERR_ABORTED|detached/i.test(e.message)) throw e; });
+      await sleep(waitMs * 1.5);
+      if (/\/login/.test(page.url())) throw new Error('Betika sent My Bets to the login page - run `node bin/ev-bot.js login` again');
       for (const tab of ['settled', 'all']) {
         const clicked = await page.evaluate((t) => {
           const el = [...document.querySelectorAll('button, a, li, span, div')]

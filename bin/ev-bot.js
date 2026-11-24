@@ -285,12 +285,18 @@ const commands = {
   history: async () => {
     const store = new Store(s.storePath, { log });
     return withBrowser(async (c) => {
-      await c.ensureLoggedIn();
-      const bodies = await checkBetikaHistory(c, store, log) ?? [];
-      const all = bodies.length ? bodies : await c.betHistory();
-      console.log(`My Bets loaded ${all.length} JSON responses. Their shape (field names only, no values):`);
-      for (const b of all.slice(0, 4)) console.log(JSON.stringify(historyShape(b)).slice(0, 1500));
-      return 0;
+      try {
+        await c.ensureLoggedIn();
+        const bodies = await checkBetikaHistory(c, store, log);
+        const all = bodies?.length ? bodies : await c.betHistory();
+        console.log(`Betika API calls made by My Bets (paths only):\n  ${[...new Set(c.lastHistoryCalls ?? [])].join('\n  ') || 'none'}`);
+        console.log(`My Bets loaded ${all.length} JSON responses. Their shape (field names only, no values):`);
+        for (const b of all.slice(0, 4)) console.log(JSON.stringify(historyShape(b)).slice(0, 1500));
+        return 0;
+      } catch (e) {
+        log.error(`betika history: ${e.message.split('\n')[0]}`);
+        return 1;
+      }
     });
   },
 
