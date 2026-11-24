@@ -10,7 +10,7 @@ import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '.
 import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
-import { OddsPapi, OddsPapiError, mergeEvents } from '../src/oddsPapi.js';
+import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
 import { teamSimilarity } from '../src/teamMatch.js';
 
 const HELP = `Usage: ev-bot <command> [options]
@@ -205,7 +205,7 @@ const commands = {
       log.error(`oddspapi: ${e.message}${e.code === 'INVALID_API_KEY' ? ' - check ODDSPAPI_KEY in .env' : ''}`);
       return 1;
     }
-    console.log(`account: ${JSON.stringify(acc).slice(0, 400)}`);
+    console.log(`account: ${summarizeAccount(acc)}`); // never the raw response: it holds your key and email
     const groups = sportGroupsOf(s.sports);
     const bySport = await papi.sportGroups(groups);
     console.log(`sports: ${Object.entries(bySport).map(([id, g]) => `${g}=${id}`).join(', ') || 'none of your SPORTS found'}`);

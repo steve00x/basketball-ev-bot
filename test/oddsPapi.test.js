@@ -125,3 +125,12 @@ test('league choice: sport priority first (basketball before table tennis), then
   const { ids } = await api.chooseTournaments({ 11: 'basketball', 10: 'soccer', 25: 'tabletennis' }, { max: 5, priority: ['basketball', 'soccer'] });
   assert.deepEqual(ids, [1, 2, 4, 7]); // NCAA, NBA, EPL, then table tennis last; women's and "II" never
 });
+
+test('account summary never contains the API key or email', async () => {
+  const { summarizeAccount } = await import('../src/oddsPapi.js');
+  const acc = { api_key: '7cea-SECRET', email: 'someone@example.com', customer_segment: 'user',
+    subscriptions: [{ subscription_id: 'abc', currency: 'USD', price: null, request_limit: 250, request_count: 14, plan_name: 'Free', valid_until: '2026-12-24T00:00:00Z' }] };
+  const line = summarizeAccount(acc);
+  assert.equal(line, 'requests used 14 of 250 | plan Free | until 2026-12-24');
+  assert.ok(!/SECRET|example\.com|abc/.test(line));
+});

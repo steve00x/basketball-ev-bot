@@ -259,3 +259,25 @@ export function mergeEvents(primary, extra, { similarity, groupOf }) {
   }
   return { events: merged, joined, added };
 }
+
+/**
+ * Safe one-line summary of /v4/account: usage numbers and plan names only. The raw response
+ * contains the API key and email address, so it must never be printed or logged.
+ */
+export function summarizeAccount(acc) {
+  const found = {};
+  const walk = (v) => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (!v || typeof v !== 'object') return;
+    for (const [k, x] of Object.entries(v)) {
+      if (/key|email|token|secret|password/i.test(k)) continue;
+      if (['request_limit', 'request_count'].includes(k) && typeof x === 'number') found[k] = Math.max(found[k] ?? 0, x);
+      else if (/^(plan|plan_name|tier|product_name)$/i.test(k) && typeof x === 'string') found.plan = x;
+      else if (/^(valid_until|current_period_end|expires_at)$/i.test(k) && typeof x === 'string') found.until = x.slice(0, 10);
+      else walk(x);
+    }
+  };
+  walk(acc);
+  const used = found.request_count ?? '?', limit = found.request_limit ?? '?';
+  return `requests used ${used} of ${limit}${found.plan ? ` | plan ${found.plan}` : ''}${found.until ? ` | until ${found.until}` : ''}`;
+}
