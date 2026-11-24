@@ -142,7 +142,8 @@ export async function fetchEvents(api, s, log = console, opts = {}) {
       log.error(`${sport}: ${e.message}`);
       continue;
     }
-    events = events.filter((ev) => new Date(ev.commence_time) <= horizon);
+    // Pre-game only: games already under way are on Betika's live page, not its pre-game list
+    events = events.filter((ev) => { const t = new Date(ev.commence_time); return t > now && t <= horizon; });
     log.info(`${sport}: ${events.length} events (credits remaining: ${api.requestsRemaining})`);
     if (s.propMarkets.length) {
       for (const ev of events) {

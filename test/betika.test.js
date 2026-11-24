@@ -255,3 +255,10 @@ test('each scan logs a betting summary, including bets already placed', async ()
   await run();
   assert.ok(lines.some((m) => /^betika: 2 already bet \(already bet: .*Los Angeles Lakers/.test(m)), lines.join('\n'));
 });
+
+test('games already started are neither matched nor reported as unmatched', () => {
+  const now = new Date('2026-11-24T19:47:00Z');
+  const ev = (id, start) => ({ id, sport_key: 'soccer_efl_champ', home_team: 'Bristol City', away_team: 'Wrexham AFC', commence_time: start, bookmakers: [] });
+  const r = attachBetikaOdds([ev('live', '2026-11-24T19:45:00Z'), ev('later', '2026-11-25T19:45:00Z')], [], now);
+  assert.deepEqual(r.unmatched, ['Wrexham AFC @ Bristol City (not on Betika right now)']); // only the upcoming one
+});

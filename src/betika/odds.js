@@ -15,6 +15,7 @@ export function attachBetikaOdds(events, matches, now = new Date()) {
   const unmatched = [];
   let matched = 0;
   for (const ev of events) {
+    if (new Date(ev.commence_time) <= now) continue; // started: Betika lists it under live betting, the bot doesn't bet it
     const sport = sportGroup(ev.sport_key ?? '') ?? 'basketball';
     const inComp = competitionFilter(ev.sport_key ?? '');
     const start = new Date(ev.commence_time);
