@@ -373,7 +373,10 @@ export class BetikaClient {
             for (let pg = 1; pg <= maxPages; pg++) {
               const r = await page.evaluate(async (req, b) => {
                 try {
-                  const h = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !/^(content-length|host|origin|referer|cookie)$/i.test(k)));
+                  // only ordinary headers: Chrome's request headers include pseudo-headers (":authority" ...)
+                  // that fetch rejects as "Invalid name". The login token travels in the body.
+                  const h = { 'content-type': 'application/json', accept: 'application/json, text/plain, */*' };
+                  for (const [k, v] of Object.entries(req.headers)) if (/^(authorization|x-[a-z0-9-]+)$/i.test(k)) h[k] = v;
                   const res = await fetch(req.url, { method: 'POST', headers: h, body: JSON.stringify(b), credentials: 'include' });
                   return { status: res.status, json: res.ok ? await res.json() : null };
                 } catch (e) { return { status: 0, error: String(e.message ?? e) }; }
