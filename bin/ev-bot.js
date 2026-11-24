@@ -210,7 +210,7 @@ async function withBrowser(fn, overrides) {
 async function checkBetikaHistory(client, store, log) {
   const open = store.data.bets.filter((b) => b.live && b.status === 'placed' && b.betId && !['won', 'lost', 'void'].includes(b.betikaStatus));
   if (!open.length) return [];
-  const bodies = await client.betHistory();
+  const bodies = await client.betHistory({ want: open.map((b) => b.betId) });
   const found = matchHistory(bodies, open.map((b) => ({ short: b.betId, long: b.betIdLong })));
   const n = applyHistory(store.data.bets, found);
   if (n) store.save();

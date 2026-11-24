@@ -342,7 +342,7 @@ export class BetikaClient {
    * Open "My Bets" in the logged-in browser and return the JSON Betika loads there (read-only).
    * Also clicks a "Settled"/"All" tab if the page has one, to include finished bets.
    */
-  async betHistory({ waitMs = 6000, maxPages = 5 } = {}) {
+  async betHistory({ waitMs = 6000, maxPages = 5, want = null } = {}) {
     const page = await this.start();
     if (!(await this.isLoggedIn().catch(() => false))) await this.ensureLoggedIn();
     const bodies = [];
@@ -390,15 +390,29 @@ export class BetikaClient {
       if (historyRequest && body) {
         replaying = true; // these replies are added here, not by the listener
         try {
-          for (const p of periods) {
-            if (!p?.filter || String(p.filter) === String(body.period)) continue;
+          // Recent bets first: Week, then Month, then All (Today is inside Week). Stop as soon as
+          // every ticket we need has turned up.
+          const rank = { WEEK: 0, MONTH: 1, YEAR: 2 };
+          const ordered = periods.filter((p) => p?.filter in rank).sort((a, b) => rank[a.filter] - rank[b.filter]);
+          const ids = new Set();
+          const note = (json) => { for (const b of json?.bets ?? []) { ids.add(String(b.short_bet_id).toUpperCase()); ids.add(String(b.bet_id)); } };
+          bodies.forEach(note);
+          const done = () => want && [...want].every((t) => ids.has(String(t).toUpperCase()));
+          for (const p of ordered) {
+            if (done()) break;
+            if (String(p.filter) === String(body.period)) continue;
+            let firstOfLastPage = null;
             for (let pg = 1; pg <= maxPages; pg++) {
               const r = await this.postHistory(page, historyRequest, { ...body, period: p.filter, page: String(pg) });
               this.lastHistoryReplays.push(`${p.filter}: HTTP ${r.status} via ${r.via}${r.error ? ` ${r.error}` : ''}, ${r.json?.bets?.length ?? 0} bets`);
               const next = r.json;
               if (!next?.bets?.length) break;
               bodies.push(next);
-              if (next.bets.length < Number(next.limit ?? Infinity)) break;
+              const first = String(next.bets[0]?.bet_id ?? next.bets[0]?.short_bet_id);
+              if (first === firstOfLastPage) { bodies.pop(); break; } // Betika ignored the page number: same page again
+              firstOfLastPage = first;
+              note(next);
+              if (done() || next.bets.length < Number(next.limit ?? Infinity)) break;
             }
           }
         } finally { replaying = false; }

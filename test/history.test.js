@@ -76,3 +76,30 @@ test("period requests go from Node with the page's body (token stays in the body
   assert.equal(h['x-app'], 'web');
   assert.ok(!(':authority' in h) && !('cookie' in h)); // no pseudo-headers, no cookies
 });
+
+test('history paging: Week first, stops when every ticket is found, and when Betika repeats a page', async () => {
+  const { BetikaClient } = await import('../src/betika/client.js');
+  const asked = [];
+  const pages = {
+    WEEK: (pg) => ({ limit: '2', bets: pg === 1 ? [{ bet_id: '1', short_bet_id: 'AAA' }, { bet_id: '2', short_bet_id: 'BBB' }] : [{ bet_id: '1', short_bet_id: 'AAA' }, { bet_id: '2', short_bet_id: 'BBB' }] }),
+    MONTH: () => ({ limit: '1000', bets: [{ bet_id: '3', short_bet_id: 'CCC' }] }),
+    YEAR: () => ({ limit: '1000', bets: [{ bet_id: '4', short_bet_id: 'DDD' }] }),
+  };
+  const c = new BetikaClient({ log: { info() {}, warn() {} } });
+  c.postHistory = async (_p, _r, b) => { asked.push(`${b.period}:${b.page}`); return { status: 200, via: 'node', json: pages[b.period](Number(b.page)) }; };
+  // drive just the period loop through betHistory's internals by faking the page and first reply
+  const listeners = {};
+  const first = { limit: '1000', bets: [{ bet_id: '9', short_bet_id: 'OPEN1' }], meta: { periods: [
+    { title: 'Open', filter: 'ACTIVE' }, { title: 'All', filter: 'YEAR' }, { title: 'Today', filter: 'DATE' }, { title: 'Week', filter: 'WEEK' }, { title: 'Month', filter: 'MONTH' }] } };
+  const fakeResponse = { url: () => 'https://api.betika.com/v1/uo/bethistory', headers: () => ({ 'content-type': 'application/json' }), json: async () => first,
+    request: () => ({ method: () => 'POST', postData: () => JSON.stringify({ page: '1', limit: '1000', period: 'ACTIVE', token: 'T' }), headers: () => ({}) }), status: () => 200 };
+  c.start = async () => ({
+    on: (ev, fn) => { listeners[ev] = fn; }, off: () => {}, url: () => 'https://www.betika.com/en-ke/mybets',
+    goto: async () => { await listeners.response(fakeResponse); },
+    evaluate: async () => false,
+  });
+  c.isLoggedIn = async () => true;
+  await c.betHistory({ waitMs: 1, want: ['AAA', 'CCC'] });
+  // Week page 2 repeated page 1 -> stop; CCC still missing -> Month; all found -> All never asked; Today never asked
+  assert.deepEqual(asked, ['WEEK:1', 'WEEK:2', 'MONTH:1']);
+});
