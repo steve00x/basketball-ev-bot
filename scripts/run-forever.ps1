@@ -5,15 +5,17 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\run-forever.ps1
 #
 # Optional: other commands, e.g.  -File scripts\run-forever.ps1 scan --once
-$botArgs = if ($args.Count) { $args } else { @('scan') }
+# Exit codes: 0 = stopped by you, 2 = wrong command or settings (fix and start again): no restart.
+# @(...) keeps this a list even with one item (Windows PowerShell 5.1 would turn 'scan' into plain text)
+[string[]]$botArgs = @(if ($args.Count) { $args } else { 'scan' })
 Set-Location (Split-Path -Parent $PSScriptRoot)
 New-Item -ItemType Directory -Force -Path logs | Out-Null
 while ($true) {
   $log = "logs\bot-$(Get-Date -Format yyyy-MM-dd).log"
   "$(Get-Date -Format s) starting: node bin/ev-bot.js $botArgs" | Tee-Object -FilePath $log -Append
-  node bin/ev-bot.js @botArgs 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $log -Append
+  & node bin/ev-bot.js $botArgs 2>&1 | ForEach-Object { "$_" } | Tee-Object -FilePath $log -Append
   $code = $LASTEXITCODE
-  if ($code -eq 0 -or $code -eq 130) {
+  if ($code -eq 0 -or $code -eq 130 -or $code -eq 2) {
     "$(Get-Date -Format s) bot stopped (exit $code) - not restarting" | Tee-Object -FilePath $log -Append
     break
   }

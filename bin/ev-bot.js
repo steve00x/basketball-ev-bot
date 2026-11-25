@@ -57,13 +57,20 @@ const log = {
   error: (m) => console.error(`${ts()} ERROR ${m}`),
 };
 
-const { values: opt, positionals } = parseArgs({
-  allowPositionals: true,
-  options: {
-    once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' },
-    'min-ev': { type: 'string' }, env: { type: 'string', default: '.env' }, help: { type: 'boolean', short: 'h' },
-  },
-});
+let parsed;
+try {
+  parsed = parseArgs({
+    allowPositionals: true,
+    options: {
+      once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' },
+      'min-ev': { type: 'string' }, env: { type: 'string', default: '.env' }, help: { type: 'boolean', short: 'h' },
+    },
+  });
+} catch (e) {
+  console.error(`${e.message}\n\n${HELP}`);
+  process.exit(2);
+}
+const { values: opt, positionals } = parsed;
 if (opt.help) { console.log(HELP); process.exit(0); }
 
 const cmd = positionals[0] ?? 'scan';
@@ -74,7 +81,7 @@ try {
 } catch (e) {
   if (!(e instanceof SettingsError)) throw e;
   console.error(`Settings problem: ${e.message}`);
-  process.exit(1);
+  process.exit(2); // 2 = fix and start again (run-forever.ps1 does not restart on it)
 }
 if (opt.live) s.betikaLive = true;
 
@@ -550,5 +557,5 @@ const commands = {
   discover: () => withBrowser(async (c) => { await c.discover('discover'); return 0; }, { headless: false }),
 };
 
-if (!commands[cmd]) { console.error(`unknown command "${cmd}"\n\n${HELP}`); process.exit(1); }
+if (!commands[cmd]) { console.error(`unknown command "${cmd}"\n\n${HELP}`); process.exit(2); }
 commands[cmd]().then((code) => process.exit(code), (e) => { log.error(e.stack ?? String(e)); process.exit(1); });
