@@ -74,6 +74,8 @@ export function scanEvent(event, s, now = new Date()) {
   const opps = [];
   let threeWay = null;
   let mainTotal = null;
+  const mainTotals = new Map();   // 'totals' | 'totals_h1' | 'totals_q1' -> sharp main line
+  const exactTotalPoints = new Map();
   let mainSpread = null;
   const sharpTotalPoints = new Set();
   const sharpTeamTotals = new Set();
@@ -90,7 +92,12 @@ export function scanEvent(event, s, now = new Date()) {
     }
 
     // Lines the sharp quotes exactly are priced from its real price, never from the models.
+    const totalsFamily = /^totals(_h1|_q1)?$/.test(market) && !description;
     if (market === 'totals' && !description) for (const [, o] of books.get(sharps[0]).prices) sharpTotalPoints.add(o.point);
+    if (totalsFamily) {
+      if (!exactTotalPoints.has(market)) exactTotalPoints.set(market, new Set());
+      for (const [, o] of books.get(sharps[0]).prices) exactTotalPoints.get(market).add(o.point);
+    }
     if (market === 'team_totals') for (const [, o] of books.get(sharps[0]).prices) sharpTeamTotals.add(`${description}|${o.point}`);
 
     // Remember the sharp main spread (home line, fair P(home covers)) for team totals.
@@ -103,13 +110,14 @@ export function scanEvent(event, s, now = new Date()) {
     }
 
     // Remember the sharp main total (fair P(Over) at its line) for the alternate-totals model.
-    if (market === 'totals' && !description) {
+    // (also the 1st-half / 1st-quarter totals, each its own ladder)
+    if (totalsFamily) {
       const [[k1, o1], [k2, o2]] = [...books.get(sharps[0]).prices];
       const over = o1.name === 'Over' ? [k1, o1] : [k2, o2];
       const pOver = fair.get(over[0]);
-      if (pOver && (!mainTotal || Math.abs(pOver - 0.5) < Math.abs(mainTotal.pOver - 0.5))) {
-        mainTotal = { line: over[1].point, pOver, sharps };
-      }
+      const cur = mainTotals.get(market);
+      if (pOver && (!cur || Math.abs(pOver - 0.5) < Math.abs(cur.pOver - 0.5))) mainTotals.set(market, { line: over[1].point, pOver, sharps });
+      if (market === 'totals') mainTotal = mainTotals.get('totals');
     }
 
     // Remember the sharp 3-way 1X2 (home/draw/away): Double Chance and Draw No Bet derive from it.
@@ -153,8 +161,10 @@ export function scanEvent(event, s, now = new Date()) {
     }
   }
   if (threeWay) opps.push(...scanDerived(event, s, now, start, threeWay, sharpSet, targetSet));
-  if (mainTotal && s.altTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
-    opps.push(...scanAltTotals(event, s, now, start, mainTotal, sharpSet, targetSet, sharpTotalPoints));
+  if (s.altTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
+    for (const [key, main] of mainTotals) {
+      opps.push(...scanAltTotals(event, s, now, start, main, sharpSet, targetSet, exactTotalPoints.get(key) ?? new Set(), key));
+    }
   }
   if (mainTotal && mainSpread && s.teamTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
     opps.push(...scanTeamTotals(event, s, now, start, mainTotal, mainSpread, sharpSet, targetSet, sharpTeamTotals));
@@ -223,11 +233,14 @@ export function fitTotalLadder(lines) {
  * the centre from Pinnacle's main line. A Betika line is +EV when Betika's centre is off
  * from Pinnacle's by more than its margin. Only lines near the main line, stricter MIN_EV.
  */
-function scanAltTotals(event, s, now, start, main, sharpSet, targetSet, exactPoints = new Set()) {
+// Normal-curve spread (points) a clean Betika ladder can have, per market; full game ~17, 1st half ~11.
+const SIGMA_RANGE = { totals: [8, 30], totals_h1: [6, 20], totals_q1: [3, 12] };
+
+function scanAltTotals(event, s, now, start, main, sharpSet, targetSet, exactPoints = new Set(), marketKey = 'totals') {
   const out = [];
   for (const bm of event.bookmakers ?? []) {
     if (sharpSet.has(bm.key) || (targetSet.size && !targetSet.has(bm.key))) continue;
-    const mkt = (bm.markets ?? []).find((m) => m.key === 'totals');
+    const mkt = (bm.markets ?? []).find((m) => m.key === marketKey);
     if (!mkt) continue;
     const age = ageSeconds(bm, mkt, now);
     if (age > s.maxLineAgeSeconds) continue;
@@ -237,11 +250,13 @@ function scanAltTotals(event, s, now, start, main, sharpSet, targetSet, exactPoi
       ladder.get(o.point)[o.name === 'Over' ? 'over' : 'under'] = o.price;
     }
     const fit = fitTotalLadder([...ladder.values()]);
-    if (!fit || fit.r2 < 0.99 || fit.sigma < 8 || fit.sigma > 30) continue; // ladder doesn't look like a clean model
+    const [lo, hi] = SIGMA_RANGE[marketKey] ?? SIGMA_RANGE.totals;
+    if (!fit || fit.r2 < 0.99 || fit.sigma < lo || fit.sigma > hi) continue; // ladder doesn't look like a clean model
+    const maxDistance = s.altTotalsMaxDistance * Math.min(1, fit.sigma / 17); // same reach in "spreads" for halves
     const muSharp = main.line - fit.sigma * om.normInv(1 - main.pOver);
     const tax = s.winningsTax?.[bm.key] ?? 0;
     for (const l of ladder.values()) {
-      if (exactPoints.has(l.point) || Math.abs(l.point - main.line) > s.altTotalsMaxDistance) continue;
+      if (exactPoints.has(l.point) || Math.abs(l.point - main.line) > maxDistance) continue;
       if (Math.abs(l.point % 1) !== 0.5) continue; // whole-number lines can push
       const pOver = 1 - om.normCdf((l.point - muSharp) / fit.sigma);
       for (const [name, price, p] of [['Over', l.over, pOver], ['Under', l.under, 1 - pOver]]) {
@@ -252,7 +267,7 @@ function scanAltTotals(event, s, now, start, main, sharpSet, targetSet, exactPoi
         out.push({
           sport: event.sport_key ?? '', eventId: event.id,
           homeTeam: event.home_team ?? '', awayTeam: event.away_team ?? '', commenceTime: start,
-          market: 'totals', description: null, outcome: name, point: l.point,
+          market: marketKey, description: null, outcome: name, point: l.point,
           book: bm.key, bookTitle: bm.title ?? bm.key,
           decimal: price, effectiveDecimal: effective, winningsTax: tax,
           fairProb: p, ev, stake: om.stake(p, effective, s.bankroll, s.kellyFraction, s.maxStakePct),

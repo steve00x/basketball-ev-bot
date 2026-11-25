@@ -206,7 +206,7 @@ export const liveSettings = (s) => ({ ...s, inPlay: true, minEv: Math.max(s.live
  * and `confirm(opp, event, scanSettings)` re-prices a pick with a fresh Pinnacle price before betting.
  */
 export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false, guard = null, confirm = null,
-  steam = null, decorate = null, now = new Date() }) {
+  steam = null, decorate = null, now = new Date(), enrich = null }) {
   if (live) s = liveSettings(s);
   if (betika) {
     try {
@@ -221,6 +221,8 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
     }
   }
   if (live && guard) guard.observe(events);
+  // extra sharp prices that depend on which markets Betika has (1st half / quarter)
+  if (enrich && !live) { try { await enrich(events); } catch (e) { log.warn(`periods: ${e.message}`); } }
   const scanSettings = { ...s, targetBooks: bookPlan(s).scanTargets };
   const opps = scanEvents(events, scanSettings, now);
   if (decorate) opps.forEach(decorate);

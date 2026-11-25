@@ -75,6 +75,20 @@ export function attachBetikaOdds(events, matches, now = new Date(), { live = fal
         description: ours === 'H' ? ev.home_team : ev.away_team, side: ours, betikaTeam }))));
       if (outcomes.length) markets.push({ key: 'team_totals', last_update: ts, outcomes });
     }
+    // 1st half / 1st quarter: market keys as The Odds API names them (totals_h1, team_totals_q1, ...)
+    for (const [pk, per] of Object.entries(m.periods ?? {})) {
+      if (per.totals.length) {
+        markets.push({ key: `totals_${pk}`, last_update: ts, outcomes: per.totals.flatMap((l) => [
+          { name: 'Over', price: l.over, point: l.point }, { name: 'Under', price: l.under, point: l.point }]) });
+      }
+      const teams = [
+        { ladder: per.teamTotals.home, ours: hit.swapped ? 'A' : 'H', betikaTeam: m.home },
+        { ladder: per.teamTotals.away, ours: hit.swapped ? 'H' : 'A', betikaTeam: m.away }];
+      const outcomes = teams.flatMap(({ ladder, ours, betikaTeam }) => ladder.flatMap((l) => ['over', 'under'].map((k) => ({
+        name: k === 'over' ? 'Over' : 'Under', price: l[k], point: l.point,
+        description: ours === 'H' ? ev.home_team : ev.away_team, side: ours, betikaTeam }))));
+      if (outcomes.length) markets.push({ key: `team_totals_${pk}`, last_update: ts, outcomes });
+    }
     if (m.totals?.length) {
       markets.push({ key: 'totals', last_update: ts, outcomes: m.totals.flatMap((l) => [
         { name: 'Over', price: l.over, point: l.point }, { name: 'Under', price: l.under, point: l.point }]) });
@@ -113,6 +127,13 @@ export function betikaPick(opp) {
   }
   if (opp.market === 'totals' && spec.totals) {
     return { market: spec.totals.title, label: `${opp.outcome} ${opp.point}` };
+  }
+  // 1st half / 1st quarter, e.g. "1st Half - Total" / "1st Half - Philadelphia Total"
+  const per = /^(team_)?totals_(h1|q1)$/.exec(opp.market ?? '');
+  const p = per && spec.periods?.find((x) => x.key === per[2]);
+  if (p) {
+    if (per[1] && !opp.betikaTeam) return null;
+    return { market: per[1] ? `${p.title} - ${opp.betikaTeam} Total` : `${p.title} - Total`, label: `${opp.outcome} ${opp.point}` };
   }
   return null;
 }

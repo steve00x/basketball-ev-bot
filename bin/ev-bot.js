@@ -15,6 +15,7 @@ import { LiveGuard, confirmLive } from '../src/liveGuard.js';
 import { review } from '../src/review.js';
 import { anchoredLiveEvents, recordAnchors, runModelCycle } from '../src/inplayModel.js';
 import { SteamTracker } from '../src/steam.js';
+import { PeriodPrices } from '../src/periods.js';
 import { settlePending } from '../src/settle.js';
 import { applyHistory, historyShape, matchHistory, statusWords } from '../src/betika/history.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
@@ -35,6 +36,7 @@ Commands:
   login       open a visible browser and log in to Betika (session is saved)
   balance     print the Betika account balance
   review      bad luck or bad prices? wins vs what the fair odds predicted
+  periods     check Pinnacle's 1st half / quarter prices on The Odds API (a few credits)
   discover    visible browser that records Betika API calls to ./discover/
 
 Options:
@@ -143,6 +145,8 @@ async function scan() {
     let lastLive = 0, liveActive = false;
     const liveGuard = new LiveGuard(s);
     const steam = s.steam ? new SteamTracker(s) : null;
+    const periods = new PeriodPrices(api, s, log);
+    const enrich = (evs) => periods.enrich(evs);
     const steamMarkets = (sport) => ['h2h', 'totals', 'spreads'].filter((m) => marketsFor(sport, s).includes(m));
     let lastSettle = 0;
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
@@ -192,7 +196,7 @@ async function scan() {
           log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
           events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
         }
-        const r = events?.length ? await runCycle({ events, s, store, notifier, betika: feed, executor, log, steam }) : { found: Infinity };
+        const r = events?.length ? await runCycle({ events, s, store, notifier, betika: feed, executor, log, steam, enrich }) : { found: Infinity };
         if (events?.length) {
           track(r, kind);
           // pre-match Pinnacle prices for the in-play model
@@ -366,6 +370,29 @@ const commands = {
         return 1;
       }
     });
+  },
+
+  // Does The Odds API have Pinnacle's 1st half / quarter prices? Checks the next NBA (or NCAAB) game.
+  periods: async () => {
+    let api;
+    try { api = new OddsAPI(s.apiKey); } catch (e) { log.error(e.message); return 1; }
+    const markets = ['totals_h1', 'team_totals_h1', 'totals_q1', 'team_totals_q1'];
+    for (const sport of ['basketball_nba', 'basketball_ncaab', 'basketball_wnba']) {
+      const evs = (await api.getEvents(sport).catch(() => [])).filter((e) => new Date(e.commence_time) > new Date())
+        .sort((a, b) => new Date(a.commence_time) - new Date(b.commence_time));
+      if (!evs.length) { console.log(`${sport}: no upcoming games`); continue; }
+      const e = evs[0];
+      const res = await api.getEventOdds(sport, e.id, markets, s.regions, bookPlan(s).apiBooks);
+      console.log(`${sport}: ${e.away_team} @ ${e.home_team} (${e.commence_time}) - cost ${api.lastCost ?? '?'} credits`);
+      for (const bm of res?.bookmakers ?? []) {
+        for (const m of bm.markets ?? []) {
+          const pts = [...new Set(m.outcomes.map((o) => `${o.description ? `${o.description} ` : ''}${o.point}`))];
+          console.log(`  ${bm.key.padEnd(10)} ${m.key.padEnd(15)} ${pts.join(', ')}`);
+        }
+      }
+      if (!res?.bookmakers?.length) console.log('  no prices for these markets from the sharp books yet (they often appear closer to tip-off)');
+    }
+    return 0;
   },
 
   // Bad luck or bad prices? Wins you got vs wins the fair odds predicted, per group (reads the bet log only)

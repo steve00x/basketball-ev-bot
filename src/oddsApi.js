@@ -29,6 +29,7 @@ export class OddsAPI {
       }
       this.requestsRemaining = res.headers.get('x-requests-remaining') ?? this.requestsRemaining;
       this.requestsUsed = res.headers.get('x-requests-used') ?? this.requestsUsed;
+      this.lastCost = res.headers.get('x-requests-last') != null ? Number(res.headers.get('x-requests-last')) : null; // credits this call cost
       if (res.status === 429 || res.status >= 500) {
         if (attempt === this.retries) throw new OddsAPIError(`${path}: HTTP ${res.status}`);
         await sleep(this.backoffMs * 2 ** attempt);

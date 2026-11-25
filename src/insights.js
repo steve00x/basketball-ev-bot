@@ -63,6 +63,8 @@ export function marketLabel(b) {
     totals: b.model === 'alt-total' ? 'Alt totals (model)' : 'Totals',
     team_totals: b.model === 'team-total' ? 'Team totals (model)' : 'Team totals',
     double_chance: 'Double chance', draw_no_bet: 'Draw no bet',
+    totals_h1: b.model === 'alt-total' ? '1st half totals (model)' : '1st half totals', team_totals_h1: '1st half team totals',
+    totals_q1: b.model === 'alt-total' ? '1st quarter totals (model)' : '1st quarter totals', team_totals_q1: '1st quarter team totals',
   }[g.market] ?? (g.market ? String(g.market).replace(/_/g, ' ') : 'Other');
   if (b.model === 'inplay-model') return (b.late ? 'In-play model 80+ (test) ' : 'In-play model ') + name;
   return (b.inPlay ? 'In-play ' : '') + name + (b.steam ? ' (steam)' : '');

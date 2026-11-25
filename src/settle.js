@@ -67,7 +67,9 @@ export function firstDryRuns(bets) {
 /** Bets worth settling: placed for real, or (first) dry runs; not settled yet; game should be over. */
 export function pendingBets(bets, now = Date.now()) {
   const dry = new Set(firstDryRuns(bets));
+  // 1st half / quarter picks can't be graded from final scores: Betika's bet history settles those
   return bets.filter((b) => !b.result && b.grade?.sport && b.grade?.eventId && b.grade?.commenceTime && !String(b.grade.eventId).startsWith('op-')
+    && !/_(h1|q1)$/.test(b.grade.market ?? '')
     && ((b.live && b.status === 'placed') || dry.has(b))
     && now - new Date(b.grade.commenceTime) >= SETTLE_AFTER_MS);
 }

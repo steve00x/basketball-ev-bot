@@ -17,6 +17,12 @@ export const SPORTS = {
     totals: { subType: 225, title: 'Total (Incl. Overtime)' },
     // "<TEAM> TOTAL (INCL. OVERTIME)": 227 = Betika's first-listed team, 228 = second. Model-priced.
     teamTotals: { homeSubType: 227, awaySubType: 228, titleSuffix: 'Total (Incl. Overtime)' },
+    // 1st half / 1st quarter (no overtime involved): checked on Betika's NBA and NCAA pages 2026-11-25.
+    // Pinnacle's prices come from The Odds API period markets (totals_h1, team_totals_h1, ...).
+    periods: [
+      { key: 'h1', title: '1st Half', totals: 68, teamHome: 69, teamAway: 70 },
+      { key: 'q1', title: '1st Quarter', totals: 236, teamHome: 756, teamAway: 757 },
+    ],
   },
   soccer: {
     // 90 minutes + stoppage time on both sides; Pinnacle soccer h2h is 3-way.

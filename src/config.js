@@ -98,6 +98,11 @@ export const DEFAULTS = Object.freeze({
   liveModelLateTest: true,     // after LIVE_MODEL_MAX_MINUTE, keep pricing as DRY RUNS only (late-goal test)
   liveModelQuietMinutes: 3,    // no model bets this soon after a goal
   liveModelMaxAnchorHours: 3,  // the pre-match Pinnacle price must be from the last 3 h before kick-off
+  periodMarkets: true,         // basketball 1st half / 1st quarter totals and team totals (NBA, NCAAB, WNBA)
+  periodHoursBefore: 3,        // only for games starting within this many hours
+  periodRefreshMinutes: 20,    // each game's Pinnacle period prices at most this often
+  periodGamesPerScan: 3,
+  periodDailyCredits: 400,
   steam: true,                 // follow sharp Pinnacle moves (pre-match)
   steamMinMove: 0.03,          // a move of 3 percentage points of fair probability...
   steamWindowMinutes: 15,      // ...within this many minutes
@@ -197,6 +202,11 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     liveModelLateTest: bool('LIVE_MODEL_LATE_TEST', d.liveModelLateTest),
     liveModelQuietMinutes: num('LIVE_MODEL_QUIET_MINUTES', d.liveModelQuietMinutes),
     liveModelMaxAnchorHours: num('LIVE_MODEL_MAX_ANCHOR_HOURS', d.liveModelMaxAnchorHours),
+    periodMarkets: bool('PERIOD_MARKETS', d.periodMarkets),
+    periodHoursBefore: num('PERIOD_HOURS_BEFORE', d.periodHoursBefore),
+    periodRefreshMinutes: num('PERIOD_REFRESH_MINUTES', d.periodRefreshMinutes),
+    periodGamesPerScan: num('PERIOD_GAMES_PER_SCAN', d.periodGamesPerScan),
+    periodDailyCredits: num('PERIOD_DAILY_CREDITS', d.periodDailyCredits),
     steam: bool('STEAM', d.steam),
     steamMinMove: num('STEAM_MIN_MOVE', d.steamMinMove),
     steamWindowMinutes: num('STEAM_WINDOW_MINUTES', d.steamWindowMinutes),
@@ -230,7 +240,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['liveModelMinEv', 'liveModelMaxMinute', 'liveModelQuietMinutes', 'liveModelMaxAnchorHours', 'steamMinMove', 'steamWindowMinutes', 'steamWatchMinutes', 'steamPollSeconds', 'steamMaxEvents', 'steamDailyCredits', 'liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['periodHoursBefore', 'periodRefreshMinutes', 'periodGamesPerScan', 'periodDailyCredits', 'liveModelMinEv', 'liveModelMaxMinute', 'liveModelQuietMinutes', 'liveModelMaxAnchorHours', 'steamMinMove', 'steamWindowMinutes', 'steamWatchMinutes', 'steamPollSeconds', 'steamMaxEvents', 'steamDailyCredits', 'liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);
