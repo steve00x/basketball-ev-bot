@@ -88,8 +88,19 @@ const cookieKey = (req) => (req.headers.cookie ?? '').split(';').map((c) => c.tr
  * which needs DASHBOARD_KEY: the phone opens /?key=... once, gets a cookie, and is let in after that.
  * reload: re-read the bet log on each request (for the standalone dashboard next to a scan in another window).
  */
+/**
+ * Dashboard data for one account (accounts: [{ name, store, s }], first = main). Each account has
+ * its own bet log, balance and real-money switch; scan details are shared.
+ */
+export function accountData(accounts, name, state = botState, now = new Date()) {
+  const a = accounts.find((x) => x.name === name) ?? accounts[0];
+  const st = { ...state, mode: { ...state.mode, betikaLive: a.s.betikaLive, liveBetsLive: a.s.liveBetsLive } };
+  return { ...dashboardData(a.store, a.s, st, now), account: a.name, accounts: accounts.map((x) => x.name) };
+}
+
 export function startDashboard({ store, s, port = 3000, log = console, state = botState, reload = false,
-  host = s?.dashboardHost || '127.0.0.1', key = s?.dashboardKey || '' }) {
+  host = s?.dashboardHost || '127.0.0.1', key = s?.dashboardKey || '', accounts = null }) {
+  const accts = accounts?.length ? accounts : [{ name: 'main', store, s }];
   if (!LOCAL_HOSTS.has(host) && String(key).length < 16) {
     log.error?.('dashboard: DASHBOARD_HOST opens it to other devices, so DASHBOARD_KEY must be set (16+ random characters) - showing it on this PC only');
     host = '127.0.0.1';
@@ -110,9 +121,9 @@ export function startDashboard({ store, s, port = 3000, log = console, state = b
       }
     }
     if (url.pathname === '/api/state') {
-      if (reload) store.reload();
+      if (reload) for (const a of accts) a.store.reload();
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      return res.end(JSON.stringify(dashboardData(store, s, state)));
+      return res.end(JSON.stringify(accountData(accts, url.searchParams.get('account'), state)));
     }
     if (url.pathname === '/' || url.pathname === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
@@ -175,7 +186,7 @@ details.tv{margin-top:8px}details.tv summary{cursor:pointer;color:var(--mut);fon
 .note{color:var(--mut);font-size:12px;margin-top:8px}
 .chart-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--mut);text-align:center;padding:0 16px}
 </style></head><body>
-<header><h1>EV Bot</h1><div class="pills" id="pills"></div><div class="muted" id="updated"></div></header>
+<header><h1>EV Bot</h1><div class="seg" id="accts" role="group" aria-label="Betika account" hidden></div><div class="pills" id="pills"></div><div class="muted" id="updated"></div></header>
 <main>
 <section class="alerts" id="alerts" aria-live="polite"></section>
 <section class="tiles" id="tiles"></section>
@@ -227,8 +238,17 @@ function resultTile(k, r) {
   return d;
 }
 const statusClass = (s) => s === 'placed' ? 'pos' : (s === 'rejected' || s === 'error' || s === 'unknown') ? 'neg' : 'muted';
+let account = (() => { try { return localStorage.getItem('evbot-account') || 'main'; } catch { return 'main'; } })();
 async function refresh() {
-  let d; try { d = await (await fetch('/api/state', { cache: 'no-store' })).json(); } catch { $('updated').textContent = 'bot not reachable'; return; }
+  let d; try { d = await (await fetch('/api/state?account=' + encodeURIComponent(account), { cache: 'no-store' })).json(); } catch { $('updated').textContent = 'bot not reachable'; return; }
+  // account switch, shown only with more than one Betika account
+  const names = d.accounts ?? [];
+  $('accts').hidden = names.length < 2;
+  if (names.length > 1 && $('accts').dataset.names !== names.join(',')) {
+    $('accts').dataset.names = names.join(',');
+    $('accts').replaceChildren(...names.map((n) => { const b = el('button', n); b.addEventListener('click', () => { account = n; try { localStorage.setItem('evbot-account', n); } catch {} refresh(); }); return b; }));
+  }
+  for (const b of $('accts').children) b.setAttribute('aria-pressed', String(b.textContent === d.account));
   const m = d.mode ?? {};
   const pills = $('pills'); pills.replaceChildren(
     el('span', m.betikaLive ? 'LIVE BETTING' : 'DRY RUN', 'pill ' + (m.betikaLive ? 'ok' : 'warn')),

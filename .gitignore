@@ -1,7 +1,12 @@
 node_modules/
 .env
+# other Betika accounts: .env.<name> holds their login - never committed
+.env.*
+!.env.example
+.betika-session-*/
 .betika-session/
 ev-bot-store.json*
+ev-bot-store-*.json*
 discover/
 oddspapi-cache.json
 logs/

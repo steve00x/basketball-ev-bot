@@ -231,7 +231,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   log.info(`found ${opps.length} +EV ${live ? 'LIVE ' : ''}bets (${fresh.length} new)`);
   // Every priced pick at any EV: the closest call (below) and closing prices for CLV
   const priced = scanEvents(events, { ...scanSettings, minEv: -1, altTotalsMinEv: -1, teamTotalsMinEv: -1, soccerModelMinEv: -1, soccerModelMaxEv: Infinity }, now);
-  if (!live && recordClosing(store.data.bets, priced)) store.save();
+  if (!live) for (const st of [store, ...(executor?.extraStores ?? [])]) if (recordClosing(st.data.bets, priced)) st.save();
   if (!live && steam) {
     // Pinnacle moving towards a pick: tagged; moving away: not bet until it settles
     steam.observe(priced);

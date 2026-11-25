@@ -124,3 +124,31 @@ export class BetikaExecutor {
     this.notify(`Betika bot halted: ${reason}`).catch(() => {});
   }
 }
+
+/**
+ * Several Betika accounts on one scan: every pick goes to each account's executor in turn (each
+ * with its own login, stake, limits, bet log and guards). Results reported are the main account's;
+ * the others log their own lines tagged with the account name.
+ */
+export class MultiExecutor {
+  constructor(main, extra = [], log = console) {
+    Object.assign(this, { main, extra, log });
+  }
+
+  get store() { return this.main.store; }
+  get extraStores() { return this.extra.map((e) => e.store); }
+  get pausedUntil() { return this.main.pausedUntil; }
+  get halted() { return this.main.halted; }
+  get haltReason() { return this.main.haltReason; }
+  set pausedStrategy(f) { this.main.pausedStrategy = f; for (const e of this.extra) e.pausedStrategy = f; }
+
+  check(opp, stake) { return this.main.check(opp, stake); }
+
+  async execute(opp) {
+    const r = await this.main.execute(opp);
+    for (const ex of this.extra) {
+      try { await ex.execute(opp); } catch (e) { this.log.warn?.(`betika [${ex.s.account}]: ${e.message}`); }
+    }
+    return r;
+  }
+}

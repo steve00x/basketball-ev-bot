@@ -14,6 +14,47 @@ export function loadDotenv(path = '.env') {
 }
 
 const env = (k) => (process.env[k] ?? '').trim();
+
+/** KEY=value lines of a .env-style file as an object (does not touch process.env). */
+export function readEnvFile(path) {
+  const out = {};
+  for (const raw of fs.readFileSync(path, 'utf8').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || !line.includes('=')) continue;
+    const i = line.indexOf('=');
+    out[line.slice(0, i).trim()] = line.slice(i + 1).split(/\s+#/)[0].trim().replace(/^['"]|['"]$/g, '');
+  }
+  return out;
+}
+
+/**
+ * Settings of an extra Betika account (BETIKA_ACCOUNTS=dad -> file .env.dad). Only account-level
+ * settings can differ: login, stake, limits and the real-money switches. Everything else (sports,
+ * EV thresholds, tax, strategies) is shared with the main account, so one scan serves all accounts.
+ */
+export const ACCOUNT_KEYS = {
+  BETIKA_PHONE: ['betikaPhone', 'str'], BETIKA_PASSWORD: ['betikaPassword', 'str'],
+  BETIKA_SESSION_DIR: ['betikaSessionDir', 'str'], STORE_PATH: ['storePath', 'str'],
+  BETIKA_LIVE: ['betikaLive', 'bool'], LIVE_BETS_LIVE: ['liveBetsLive', 'bool'],
+  BETIKA_FIXED_STAKE: ['betikaFixedStake', 'num'], BETIKA_MIN_STAKE: ['betikaMinStake', 'num'], BETIKA_MAX_STAKE: ['betikaMaxStake', 'num'],
+  BETIKA_DAILY_STAKE_LIMIT: ['betikaDailyStakeLimit', 'num'], BETIKA_MAX_BETS_PER_DAY: ['betikaMaxBetsPerDay', 'num'], BANKROLL: ['bankroll', 'num'],
+};
+export function accountSettings(base, name, dir = '.') {
+  if (!/^[a-z0-9_-]{1,20}$/i.test(name) || name === 'main') throw new SettingsError(`BETIKA_ACCOUNTS: "${name}" is not a usable account name (letters, digits, - or _)`);
+  const file = `${dir}/.env.${name}`;
+  if (!fs.existsSync(file)) throw new SettingsError(`BETIKA_ACCOUNTS lists "${name}" but ${file} does not exist`);
+  const raw = readEnvFile(file);
+  const s = { ...base, account: name, betikaPhone: '', betikaPassword: '', betikaSessionDir: `.betika-session-${name}`, storePath: `ev-bot-store-${name}.json` };
+  for (const [k, v] of Object.entries(raw)) {
+    const spec = ACCOUNT_KEYS[k];
+    if (!spec) throw new SettingsError(`${file}: ${k} can only be set in the main .env (accounts share everything except login, stake and limits)`);
+    if (v === '') continue;
+    s[spec[0]] = spec[1] === 'num' ? parseNumber(v, `${file} ${k}`) : spec[1] === 'bool' ? /^(1|true|yes|on)$/i.test(v) : v;
+  }
+  if (!s.betikaPhone || !s.betikaPassword) throw new SettingsError(`${file}: set BETIKA_PHONE and BETIKA_PASSWORD for this account`);
+  if (s.betikaSessionDir === base.betikaSessionDir || s.storePath === base.storePath) throw new SettingsError(`${file}: needs its own BETIKA_SESSION_DIR and STORE_PATH`);
+  return validateSettings(s);
+}
 const list = (k, d) => { const v = env(k).split(',').map((s) => s.trim()).filter(Boolean); return v.length ? v : d; };
 export class SettingsError extends Error {}
 
@@ -255,6 +296,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     betikaMaxBetsPerDay: num('BETIKA_MAX_BETS_PER_DAY', d.betikaMaxBetsPerDay),
     betikaSelectors: str('BETIKA_SELECTORS', ''),
     betikaSessionDir: str('BETIKA_SESSION_DIR', d.betikaSessionDir),
+    betikaAccounts: list('BETIKA_ACCOUNTS', []),
     chromePath: str('CHROME_PATH', ''),
     betikaBrowserProxy: str('BETIKA_BROWSER_PROXY', ''),
     ...overrides,

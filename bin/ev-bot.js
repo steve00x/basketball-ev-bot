@@ -3,10 +3,10 @@
 import { parseArgs } from 'node:util';
 import { BetikaAPI } from '../src/betika/api.js';
 import { BetikaClient } from '../src/betika/client.js';
-import { BetikaExecutor } from '../src/betika/executor.js';
+import { BetikaExecutor, MultiExecutor } from '../src/betika/executor.js';
 import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, bookPlan, fetchEvents, fetchLiveEvents, loadDemoEvents, marketsFor, nextScanPlan, resolveKeys, runCycle } from '../src/bot.js';
 import { SPORTS, sportGroup } from '../src/sports.js';
-import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '../src/config.js';
+import { SettingsError, accountSettings, parseNumber, settingsFromEnv, validateSettings } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
@@ -62,7 +62,7 @@ try {
   parsed = parseArgs({
     allowPositionals: true,
     options: {
-      once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' },
+      once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' }, account: { type: 'string' },
       'min-ev': { type: 'string' }, env: { type: 'string', default: '.env' }, help: { type: 'boolean', short: 'h' },
     },
   });
@@ -84,6 +84,15 @@ try {
   process.exit(2); // 2 = fix and start again (run-forever.ps1 does not restart on it)
 }
 if (opt.live) s.betikaLive = true;
+// --account NAME: login / balance / history / review / dashboard for another Betika account (.env.NAME)
+if (opt.account && opt.account !== 'main') {
+  if (cmd === 'scan') { console.error('scan runs every account in BETIKA_ACCOUNTS at once - start it without --account'); process.exit(2); }
+  try { s = accountSettings(s, opt.account); } catch (e) {
+    if (!(e instanceof SettingsError)) throw e;
+    console.error(`Settings problem: ${e.message}`);
+    process.exit(2);
+  }
+}
 
 const makeClient = (overrides = {}) => new BetikaClient({
   headless: s.betikaHeadless, sessionDir: s.betikaSessionDir, chromePath: s.chromePath, proxy: s.betikaBrowserProxy,
@@ -118,22 +127,45 @@ async function scan() {
   process.on('exit', release);
   const store = new Store(s.storePath, { log });
   let feed = null, client = null, executor = null;
+  const accounts = [{ name: 'main', s, store, log }]; // + BETIKA_ACCOUNTS
   if (s.betikaEnabled) {
     feed = new BetikaAPI();
     client = makeClient();
+    accounts[0].client = client;
     if (s.betikaLive) await client.ensureLoggedIn();
     if (s.betikaLive) await refreshBalance(client, store, log);
     executor = new BetikaExecutor(s, client, store, { log, notify: (t) => notifier.sendText(t) });
-    executor.pausedStrategy = (opp) => (s.strategyGuard ? botState.pausedStrategies?.[strategyOf(opp)] ?? null : null);
     log.info(`betika: ${s.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - bet slips are filled, never submitted'}`
       + ` | winnings tax ${(s.winningsTax.betika * 100).toFixed(0)}%`);
+    // other Betika accounts (BETIKA_ACCOUNTS=dad -> .env.dad): same scan, own login, stake, limits and bet log
+    for (const name of s.betikaAccounts ?? []) {
+      let as;
+      try { as = accountSettings(s, name); } catch (e) {
+        if (!(e instanceof SettingsError)) throw e;
+        log.error(`Settings problem: ${e.message}`);
+        return 2;
+      }
+      const tag = { info: (m) => log.info(`[${name}] ${m}`), warn: (m) => log.warn(`[${name}] ${m}`), error: (m) => log.error(`[${name}] ${m}`) };
+      let rel;
+      try { rel = acquireLock(as.storePath); } catch (e) { log.error(`[${name}] ${e.message}`); return 1; }
+      process.on('exit', rel);
+      const st = new Store(as.storePath, { log: tag });
+      const cl = makeClient({ sessionDir: as.betikaSessionDir, phone: as.betikaPhone, password: as.betikaPassword, log: tag });
+      if (as.betikaLive) { await cl.ensureLoggedIn(); await refreshBalance(cl, st, tag); }
+      const ex = new BetikaExecutor(as, cl, st, { log: tag, notify: (t) => notifier.sendText(`[${name}] ${t}`) });
+      accounts.push({ name, s: as, client: cl, store: st, executor: ex, log: tag });
+      tag.info(`betika: ${as.betikaLive ? 'LIVE - real bets' : 'DRY RUN'} | stake ${as.betikaFixedStake || 'Kelly'} | max ${as.betikaMaxBetsPerDay} bets/day`);
+    }
+    if (accounts.length > 1) executor = new MultiExecutor(executor, accounts.slice(1).map((a) => a.executor), log);
+    executor.pausedStrategy = (opp) => (s.strategyGuard ? botState.pausedStrategies?.[strategyOf(opp)] ?? null : null);
+    accounts[0].executor = executor;
   }
   log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`
     + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`
     + ` | live betting ${s.liveBetting ? `${s.liveBetsLive && s.betikaLive ? 'REAL' : 'dry run'} (${s.liveSports.join('/')}, every ${s.livePollSeconds}s, min ${(Math.max(s.liveMinEv, s.minEv) * 100).toFixed(1)}%)` : 'off'}`
     + ` | fast scans ${s.fastScanMinutes > 0 ? `every ${Math.round(s.fastPollSeconds / 60)} min within ${s.fastScanMinutes} min of ${s.fastScanSports.join('/')} games` : 'off'}`);
   try {
-    if (s.dashboard) startDashboard({ store, s, port: s.dashboardPort, log });
+    if (s.dashboard) startDashboard({ store, s, port: s.dashboardPort, log, accounts: accounts.map(({ name, store: st, s: as }) => ({ name, store: st, s: as })) });
     Object.assign(botState.mode, { betikaLive: s.betikaLive, liveBetting: s.liveBetting, liveBetsLive: s.liveBetsLive,
       minEv: s.minEv, tax: s.winningsTax.betika, sports: s.sports });
     const track = (r, k) => {
@@ -272,13 +304,18 @@ async function scan() {
       // Grade finished bets from final scores (about 2 credits per sport with unsettled bets)
       if (s.settle && Date.now() - lastSettle >= s.settleIntervalMinutes * 60_000) {
         lastSettle = Date.now();
-        try { await settlePending(api, store, log); } catch (e) { log.warn(`settle: ${e.message}`); }
-        // Betika's own record of placed bets (status and payout), read from My Bets
-        if (client && s.betikaLive && s.betikaHistory) {
-          try { await checkBetikaHistory(client, store, log); } catch (e) { log.warn(`betika history: ${e.message.split('\n')[0]}`); }
+        for (const a of accounts) {
+          try { await settlePending(api, a.store, a.log); } catch (e) { a.log.warn(`settle: ${e.message}`); }
         }
-        // the real balance (winnings paid in, deposits, bets placed by hand) for the dashboard
-        if (client && s.betikaLive) await refreshBalance(client, store, log);
+        // Betika's own record of placed bets (status and payout), read from My Bets
+        for (const a of accounts) {
+          if (!a.client || !a.s.betikaLive) continue;
+          if (s.betikaHistory) {
+            try { await checkBetikaHistory(a.client, a.store, a.log); } catch (e) { a.log.warn(`betika history: ${e.message.split('\n')[0]}`); }
+          }
+          // the real balance (winnings paid in, deposits, bets placed by hand) for the dashboard
+          await refreshBalance(a.client, a.store, a.log);
+        }
         judge();
       }
       if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
@@ -302,7 +339,7 @@ async function scan() {
       for (let t = 0; t < plan.waitMs / 1000 && !stopping; t++) await sleep(1000);
     }
   } finally {
-    await client?.close();
+    for (const a of accounts) await a.client?.close();
     release();
   }
   return 0;
@@ -476,7 +513,11 @@ const commands = {
     const store = new Store(s.storePath, { log });
     Object.assign(botState.mode, { betikaLive: s.betikaLive, liveBetting: s.liveBetting, liveBetsLive: s.liveBetsLive,
       minEv: s.minEv, tax: s.winningsTax.betika });
-    startDashboard({ store, s, port: s.dashboardPort, log, reload: true });
+    const accts = [{ name: 'main', store, s }];
+    for (const name of opt.account ? [] : s.betikaAccounts ?? []) {
+      try { const as = accountSettings(s, name); accts.push({ name, store: new Store(as.storePath, { log }), s: as }); } catch (e) { log.warn(e.message); }
+    }
+    startDashboard({ store, s, port: s.dashboardPort, log, reload: true, accounts: accts });
     log.info('showing the saved bet log (no scanning here); it updates as a scan in another window saves bets - press Ctrl+C to stop');
     await new Promise(() => {});
   },
