@@ -37,7 +37,7 @@ export function attachBetikaOdds(events, matches, now = new Date(), { live = fal
     used.add(m);
     matched++;
     ev.betikaRef = { sport, parentMatchId: m.parentMatchId, home: m.home, away: m.away, swapped: hit.swapped,
-      ...(m.live ? { liveMatchId: m.liveMatchId, clock: m.clock, period: m.period, score: m.score } : {}) };
+      ...(m.live ? { liveMatchId: m.liveMatchId, clock: m.clock, period: m.period, score: m.score, redCards: m.redCards ?? null } : {}) };
 
     const ts = now.toISOString();
     const markets = [];

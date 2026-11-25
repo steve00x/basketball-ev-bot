@@ -92,6 +92,18 @@ export const DEFAULTS = Object.freeze({
   liveMaxEv: 0.15,             // in play, a bigger "edge" is almost always a stale price: skip it
   liveScoreSettleSeconds: 10,  // Pinnacle must have priced the game this long after the score last changed
   liveConfirm: true,           // re-check with a fresh Pinnacle price right before an in-play bet (1 credit)
+  liveModel: true,             // in-play soccer priced by our own model (pre-match Pinnacle + live score/minute)
+  liveModelMinEv: 0.06,
+  liveModelMaxMinute: 80,
+  liveModelQuietMinutes: 3,    // no model bets this soon after a goal
+  liveModelMaxAnchorHours: 3,  // the pre-match Pinnacle price must be from the last 3 h before kick-off
+  steam: true,                 // follow sharp Pinnacle moves (pre-match)
+  steamMinMove: 0.03,          // a move of 3 percentage points of fair probability...
+  steamWindowMinutes: 15,      // ...within this many minutes
+  steamWatchMinutes: 10,       // then re-price that game every STEAM_POLL_SECONDS for this long
+  steamPollSeconds: 60,
+  steamMaxEvents: 3,
+  steamDailyCredits: 300,
   liveMaxHoursSinceStart: 4,
   // OddsPapi: second Pinnacle source, used only when The Odds API finds fewer than N +EV bets
   oddsPapiKey: '',
@@ -178,6 +190,18 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     liveMaxEv: num('LIVE_MAX_EV', d.liveMaxEv),
     liveScoreSettleSeconds: num('LIVE_SCORE_SETTLE_SECONDS', d.liveScoreSettleSeconds),
     liveConfirm: bool('LIVE_CONFIRM', d.liveConfirm),
+    liveModel: bool('LIVE_MODEL', d.liveModel),
+    liveModelMinEv: num('LIVE_MODEL_MIN_EV', d.liveModelMinEv),
+    liveModelMaxMinute: num('LIVE_MODEL_MAX_MINUTE', d.liveModelMaxMinute),
+    liveModelQuietMinutes: num('LIVE_MODEL_QUIET_MINUTES', d.liveModelQuietMinutes),
+    liveModelMaxAnchorHours: num('LIVE_MODEL_MAX_ANCHOR_HOURS', d.liveModelMaxAnchorHours),
+    steam: bool('STEAM', d.steam),
+    steamMinMove: num('STEAM_MIN_MOVE', d.steamMinMove),
+    steamWindowMinutes: num('STEAM_WINDOW_MINUTES', d.steamWindowMinutes),
+    steamWatchMinutes: num('STEAM_WATCH_MINUTES', d.steamWatchMinutes),
+    steamPollSeconds: num('STEAM_POLL_SECONDS', d.steamPollSeconds),
+    steamMaxEvents: num('STEAM_MAX_EVENTS', d.steamMaxEvents),
+    steamDailyCredits: num('STEAM_DAILY_CREDITS', d.steamDailyCredits),
     liveMaxHoursSinceStart: num('LIVE_MAX_HOURS_SINCE_START', d.liveMaxHoursSinceStart),
     oddsPapiKey: str('ODDSPAPI_KEY', ''),
     oddsPapiWhenFewerThan: num('ODDSPAPI_WHEN_FEWER_THAN', d.oddsPapiWhenFewerThan),
@@ -204,7 +228,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['liveModelMinEv', 'liveModelMaxMinute', 'liveModelQuietMinutes', 'liveModelMaxAnchorHours', 'steamMinMove', 'steamWindowMinutes', 'steamWatchMinutes', 'steamPollSeconds', 'steamMaxEvents', 'steamDailyCredits', 'liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);

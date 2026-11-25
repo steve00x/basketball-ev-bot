@@ -64,7 +64,8 @@ export function marketLabel(b) {
     team_totals: b.model === 'team-total' ? 'Team totals (model)' : 'Team totals',
     double_chance: 'Double chance', draw_no_bet: 'Draw no bet',
   }[g.market] ?? (g.market ? String(g.market).replace(/_/g, ' ') : 'Other');
-  return (b.inPlay ? 'In-play ' : '') + name;
+  if (b.model === 'inplay-model') return 'In-play model ' + name;
+  return (b.inPlay ? 'In-play ' : '') + name + (b.steam ? ' (steam)' : '');
 }
 
 /** Bets the dashboard reports on: real (placed) and first dry runs. */

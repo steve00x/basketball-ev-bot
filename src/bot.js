@@ -205,7 +205,8 @@ export const liveSettings = (s) => ({ ...s, inPlay: true, minEv: Math.max(s.live
  * One scan + bet pass. In play, `guard` (LiveGuard) blocks picks priced before the current score
  * and `confirm(opp, event, scanSettings)` re-prices a pick with a fresh Pinnacle price before betting.
  */
-export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false, guard = null, confirm = null }) {
+export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false, guard = null, confirm = null,
+  steam = null, decorate = null, now = new Date() }) {
   if (live) s = liveSettings(s);
   if (betika) {
     try {
@@ -221,13 +222,20 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   }
   if (live && guard) guard.observe(events);
   const scanSettings = { ...s, targetBooks: bookPlan(s).scanTargets };
-  const opps = scanEvents(events, scanSettings);
+  const opps = scanEvents(events, scanSettings, now);
+  if (decorate) opps.forEach(decorate);
   if (s.betikaFixedStake > 0) for (const o of opps) if (o.book === 'betika') o.stake = s.betikaFixedStake; // alerts show the real stake
   const fresh = opps.filter((o) => store.shouldAlert(dedupeKey(o), o.ev, s.realertEvDelta));
   log.info(`found ${opps.length} +EV ${live ? 'LIVE ' : ''}bets (${fresh.length} new)`);
   // Every priced pick at any EV: the closest call (below) and closing prices for CLV
-  const priced = scanEvents(events, { ...scanSettings, minEv: -1, altTotalsMinEv: -1, teamTotalsMinEv: -1 });
+  const priced = scanEvents(events, { ...scanSettings, minEv: -1, altTotalsMinEv: -1, teamTotalsMinEv: -1 }, now);
   if (!live && recordClosing(store.data.bets, priced)) store.save();
+  if (!live && steam) {
+    // Pinnacle moving towards a pick: tagged; moving away: not bet until it settles
+    steam.observe(priced);
+    const dropped = steam.apply(opps);
+    if (dropped.length) log.info(`steam: not betting ${dropped.length} pick(s) Pinnacle is moving away from (${dropped.slice(0, 3).map(selection).join('; ')})`);
+  }
   let closest = null;
   if (!opps.length) {
     // Show the closest call so you can see prices really are being compared.
@@ -251,11 +259,11 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
       if (o.book !== 'betika') continue;
       if (o.inPlay) {
         // in play: only when Pinnacle has priced the current score, then once more with a fresh price
-        const why = guard?.check(o);
+        const why = guard?.check(o, +now);
         if (why) { results.push({ opp: o, result: { status: 'skipped', reason: why } }); continue; }
         if (confirm && !store.hasBet(dedupeKey(o)) && !executor.check(o, s.betikaFixedStake || o.stake)) {
           const c = await confirm(o, byId.get(o.eventId), scanSettings);
-          const why2 = c.opp ? guard?.check(c.opp) : c.reason;
+          const why2 = c.opp ? guard?.check(c.opp, +now) : c.reason;
           if (why2) {
             log.info(`live: skip ${selection(o)} (${why2.replace(/_/g, ' ')}${c.error ? `: ${c.error}` : ''})`);
             results.push({ opp: o, result: { status: 'skipped', reason: why2 } });

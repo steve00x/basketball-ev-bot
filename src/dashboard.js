@@ -75,7 +75,7 @@ export function dashboardData(store, s, state = botState, now = new Date()) {
 export function summarizeOpps(opps) {
   return opps.slice(0, 40).map((o) => ({
     key: dedupeKey(o), sport: o.sport, matchup: matchup(o), selection: selection(o), market: o.market,
-    odds: o.decimal, fair: (1 - (o.pushProb ?? 0)) / o.fairProb, ev: o.ev, start: o.commenceTime, inPlay: !!o.inPlay, model: o.model?.kind ?? null,
+    odds: o.decimal, fair: (1 - (o.pushProb ?? 0)) / o.fairProb, ev: o.ev, start: o.commenceTime, inPlay: !!o.inPlay, model: o.model?.kind ?? null, steam: o.steam?.move ?? null,
   }));
 }
 
@@ -256,7 +256,7 @@ async function refresh() {
     resultTile('Actual profit (real bets)', d.results.real),
     resultTile('Dry-run profit (paper)', d.results.dryRun));
   table($('opps'), [
-    { h: 'Game', f: (o) => o.matchup }, { h: 'Pick', f: (o) => o.selection + (o.inPlay ? '  · LIVE' : '') + (o.model ? '  · model' : '') },
+    { h: 'Game', f: (o) => o.matchup }, { h: 'Pick', f: (o) => o.selection + (o.inPlay ? '  · LIVE' : '') + (o.model ? '  · model' : '') + (o.steam ? '  · steam ↑' : '') },
     { h: 'Betika', num: 1, f: (o) => o.odds.toFixed(2) }, { h: 'Fair', num: 1, f: (o) => o.fair.toFixed(2) },
     { h: 'EV', num: 1, f: (o) => ({ t: pct(o.ev), c: 'pos' }) }, { h: 'Starts', f: (o) => o.inPlay ? 'in play' : time(o.start) }],
     d.opportunities ?? [], 'No +EV prices in the last scan.');

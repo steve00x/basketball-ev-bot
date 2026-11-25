@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { BetikaAPI } from '../src/betika/api.js';
 import { BetikaClient } from '../src/betika/client.js';
 import { BetikaExecutor } from '../src/betika/executor.js';
-import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, fetchEvents, fetchLiveEvents, loadDemoEvents, marketsFor, nextScanPlan, resolveKeys, runCycle } from '../src/bot.js';
+import { DemoBetikaFeed, DemoBetikaPlacer, activeKeysFor, bookPlan, fetchEvents, fetchLiveEvents, loadDemoEvents, marketsFor, nextScanPlan, resolveKeys, runCycle } from '../src/bot.js';
 import { SPORTS, sportGroup } from '../src/sports.js';
 import { SettingsError, parseNumber, settingsFromEnv, validateSettings } from '../src/config.js';
 import { Notifier } from '../src/notifier.js';
@@ -13,6 +13,8 @@ import { Store, acquireLock } from '../src/store.js';
 import { botState, startDashboard, summarizeOpps } from '../src/dashboard.js';
 import { LiveGuard, confirmLive } from '../src/liveGuard.js';
 import { review } from '../src/review.js';
+import { anchoredLiveEvents, recordAnchors, runModelCycle } from '../src/inplayModel.js';
+import { SteamTracker } from '../src/steam.js';
 import { settlePending } from '../src/settle.js';
 import { applyHistory, historyShape, matchHistory, statusWords } from '../src/betika/history.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
@@ -140,6 +142,8 @@ async function scan() {
     let lastFull = 0;
     let lastLive = 0, liveActive = false;
     const liveGuard = new LiveGuard(s);
+    const steam = s.steam ? new SteamTracker(s) : null;
+    const steamMarkets = (sport) => ['h2h', 'totals', 'spreads'].filter((m) => marketsFor(sport, s).includes(m));
     let lastSettle = 0;
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
     let kind = 'full';
@@ -153,19 +157,49 @@ async function scan() {
         } else if (kind === 'live') {
           events = await fetchLiveEvents(api, s, log);
           lastLive = Date.now();
-          liveActive = events.length > 0;
-          if (liveActive) {
+          const modelGames = s.liveModel && s.liveSports.includes('soccer') ? anchoredLiveEvents(store).length : 0;
+          liveActive = events.length > 0 || modelGames > 0;
+          if (events.length) {
             track(await runCycle({ events, s, store, notifier, betika: feed, executor, log, live: true, guard: liveGuard,
               confirm: s.liveConfirm ? (o, ev, ss) => confirmLive(api, s, o, ev, ss) : null }), 'live');
           }
           else botState.credits = api.requestsRemaining;
+          // our own in-play soccer prices (free: Betika's live feed + stored pre-match prices)
+          if (modelGames) {
+            try {
+              const m = await runModelCycle({ store, s, feed, executor, notifier, log, guard: liveGuard });
+              if (m?.all?.length) track(m, 'live model');
+            } catch (e) { log.warn(`live model: ${e.stack ?? e}`); }
+          }
           events = null;
+        } else if (kind === 'steam') {
+          // games Pinnacle just moved sharply: re-price them now (a lagging Betika price is the edge)
+          events = [];
+          for (const { eventId, sport } of steam.due(Date.now(), 3)) {
+            const markets = steamMarkets(sport);
+            try {
+              const ev = await api.getEventOdds(sport, eventId, markets, s.regions, bookPlan(s).apiBooks);
+              steam.polled(eventId, markets.length);
+              if (ev && new Date(ev.commence_time) > new Date()) events.push(ev);
+            } catch (e) {
+              steam.polled(eventId, 0);
+              if (!(e instanceof OddsAPIError)) throw e;
+              log.warn(`steam ${eventId}: ${e.message}`);
+            }
+          }
+          log.info(`steam: re-priced ${events.length} game(s) Pinnacle moved sharply (watching ${steam.watch.size}, ${steam.spent.credits}/${s.steamDailyCredits} credits today)`);
         } else {
           log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
           events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
         }
-        const r = events ? await runCycle({ events, s, store, notifier, betika: feed, executor, log }) : { found: Infinity };
-        if (events) track(r, kind);
+        const r = events?.length ? await runCycle({ events, s, store, notifier, betika: feed, executor, log, steam }) : { found: Infinity };
+        if (events?.length) {
+          track(r, kind);
+          // pre-match Pinnacle prices for the in-play model
+          if (s.liveModel && recordAnchors(store, events, s)) store.save();
+          const moved = steam ? [...steam.watch.values()].filter((w) => w.reason && !w.logged) : [];
+          for (const w of moved) { w.logged = true; log.info(`steam: Pinnacle moved ${w.reason.what} by ${(w.reason.move * 100).toFixed(1)} pts in ${Math.round(w.reason.minutes)} min - watching that game`); }
+        }
         // Second source: only when The Odds API found too few bets, and not more often than
         // ODDSPAPI_MIN_INTERVAL_MINUTES (OddsPapi's free plan is 250 requests a month).
         if (papi && kind === 'full' && r.found < s.oddsPapiWhenFewerThan && !papi.quotaGone
@@ -176,7 +210,7 @@ async function scan() {
             const extra = await papi.fetchEvents(s, sportGroupsOf(s.sports));
             const m = mergeEvents(events, extra, { similarity: teamSimilarity, groupOf: (k) => sportGroup(k) });
             log.info(`oddspapi: ${m.joined} games got extra Pinnacle lines, ${m.added} new games`);
-            track(await runCycle({ events: m.events, s, store, notifier, betika: feed, executor, log }), 'full + oddspapi');
+            track(await runCycle({ events: m.events, s, store, notifier, betika: feed, executor, log, steam }), 'full + oddspapi');
             botState.oddsPapi = { requestsUsedThisRun: papi.requestsUsed };
           } catch (e) {
             log.warn(`oddspapi: ${e instanceof OddsPapiError ? e.message : (e.stack ?? e)}`);
@@ -204,6 +238,8 @@ async function scan() {
         const liveWait = Math.max(0, liveDue - Date.now());
         if (liveWait < plan.waitMs) Object.assign(plan, { kind: 'live', waitMs: liveWait });
       }
+      const steamAt = steam?.nextDueAt();
+      if (steamAt != null && steamAt - Date.now() < plan.waitMs) Object.assign(plan, { kind: 'steam', waitMs: Math.max(0, steamAt - Date.now()) });
       kind = plan.kind;
       botState.nextScan = { kind: plan.kind, at: new Date(Date.now() + plan.waitMs).toISOString() };
       if (plan.waitMs >= 60_000) log.info(`next ${plan.kind} scan in ${Math.round(plan.waitMs / 60_000)} min`);

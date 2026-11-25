@@ -174,7 +174,8 @@ export class BetikaAPI {
     const byParent = new Map(open.map((m) => [String(m.parent_match_id), m]));
     return parseListings({ data: open }, { data: open }, spec, sport).map((rec) => {
       const m = byParent.get(rec.parentMatchId);
-      return { ...rec, live: true, liveMatchId: String(m.match_id), clock: m.match_time, period: m.event_status, score: m.current_score };
+      return { ...rec, live: true, liveMatchId: String(m.match_id), clock: m.match_time, period: m.event_status, score: m.current_score,
+        redCards: (Number(m.home_red_card) || 0) + (Number(m.away_red_card) || 0) };
     });
   }
 
