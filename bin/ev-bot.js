@@ -16,6 +16,8 @@ import { review } from '../src/review.js';
 import { anchoredLiveEvents, recordAnchors, runModelCycle } from '../src/inplayModel.js';
 import { SteamTracker } from '../src/steam.js';
 import { PeriodPrices } from '../src/periods.js';
+import { BetikaWatch } from '../src/openers.js';
+import { attachBetikaOdds } from '../src/betika/odds.js';
 import { settlePending } from '../src/settle.js';
 import { applyHistory, historyShape, matchHistory, statusWords } from '../src/betika/history.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
@@ -147,6 +149,14 @@ async function scan() {
     const steam = s.steam ? new SteamTracker(s) : null;
     const periods = new PeriodPrices(api, s, log);
     const enrich = (evs) => periods.enrich(evs);
+    // Betika watch: every Betika read is noted, so new listings and price changes can be checked quickly
+    const watch = s.openers && feed ? new BetikaWatch(s) : null;
+    const betika = watch ? {
+      allMatches: async (groups, l) => { const m = await feed.allMatches(groups, l); watch.observe(m); return m; },
+      allLiveMatches: (groups, l) => feed.allLiveMatches(groups, l),
+    } : feed;
+    const tagOpener = watch ? (o) => { if (watch.isOpener(o)) o.opener = true; } : null;
+    let lastEvents = null, lastEventsAt = 0, lastBetika = 0;
     const steamMarkets = (sport) => ['h2h', 'totals', 'spreads'].filter((m) => marketsFor(sport, s).includes(m));
     let lastSettle = 0;
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
@@ -157,6 +167,7 @@ async function scan() {
         if (kind === 'full') {
           events = await fetchEvents(api, s, log);
           lastFull = Date.now();
+          lastEvents = events; lastEventsAt = lastFull; lastBetika = lastFull;
           upcoming = events.filter((e) => fastGroups.includes(sportGroup(e.sport_key ?? ''))).map((e) => +new Date(e.commence_time));
         } else if (kind === 'live') {
           events = await fetchLiveEvents(api, s, log);
@@ -174,6 +185,19 @@ async function scan() {
               const m = await runModelCycle({ store, s, feed, executor, notifier, log, guard: liveGuard });
               if (m?.all?.length) track(m, 'live model');
             } catch (e) { log.warn(`live model: ${e.stack ?? e}`); }
+          }
+          events = null;
+        } else if (kind === 'betika') {
+          // new or changed Betika prices since the last read, against the last full scan's Pinnacle prices
+          lastBetika = Date.now();
+          const groups = [...new Set(lastEvents.map((e) => sportGroup(e.sport_key ?? '')).filter(Boolean))];
+          const matches = await feed.allMatches(groups, log);
+          const changed = watch.observe(matches);
+          attachBetikaOdds(lastEvents, matches, new Date());
+          const evs = lastEvents.filter((e) => e.betikaRef && changed.has(e.betikaRef.parentMatchId) && new Date(e.commence_time) > new Date());
+          if (evs.length) {
+            log.info(`betika watch: ${changed.size} Betika game(s) with new or changed prices, ${evs.length} with Pinnacle prices - checking`);
+            track(await runCycle({ events: evs, s, store, notifier, betika: null, executor, log, steam, decorate: tagOpener }), 'betika watch');
           }
           events = null;
         } else if (kind === 'steam') {
@@ -196,7 +220,7 @@ async function scan() {
           log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
           events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
         }
-        const r = events?.length ? await runCycle({ events, s, store, notifier, betika: feed, executor, log, steam, enrich }) : { found: Infinity };
+        const r = events?.length ? await runCycle({ events, s, store, notifier, betika, executor, log, steam, enrich, decorate: tagOpener }) : { found: Infinity };
         if (events?.length) {
           track(r, kind);
           // pre-match Pinnacle prices for the in-play model
@@ -214,7 +238,7 @@ async function scan() {
             const extra = await papi.fetchEvents(s, sportGroupsOf(s.sports));
             const m = mergeEvents(events, extra, { similarity: teamSimilarity, groupOf: (k) => sportGroup(k) });
             log.info(`oddspapi: ${m.joined} games got extra Pinnacle lines, ${m.added} new games`);
-            track(await runCycle({ events: m.events, s, store, notifier, betika: feed, executor, log, steam }), 'full + oddspapi');
+            track(await runCycle({ events: m.events, s, store, notifier, betika, executor, log, steam, decorate: tagOpener }), 'full + oddspapi');
             botState.oddsPapi = { requestsUsedThisRun: papi.requestsUsed };
           } catch (e) {
             log.warn(`oddspapi: ${e instanceof OddsPapiError ? e.message : (e.stack ?? e)}`);
@@ -241,6 +265,11 @@ async function scan() {
         const liveDue = lastLive + (liveActive ? s.livePollSeconds : s.liveIdleCheckSeconds) * 1000;
         const liveWait = Math.max(0, liveDue - Date.now());
         if (liveWait < plan.waitMs) Object.assign(plan, { kind: 'live', waitMs: liveWait });
+      }
+      // Betika watch between full scans, while the last scan's Pinnacle prices are still fresh enough
+      if (watch && lastEvents?.length && Date.now() - lastEventsAt < (s.maxLineAgeSeconds - 60) * 1000) {
+        const wait = Math.max(0, lastBetika + s.openersPollSeconds * 1000 - Date.now());
+        if (wait < plan.waitMs) Object.assign(plan, { kind: 'betika', waitMs: wait });
       }
       const steamAt = steam?.nextDueAt();
       if (steamAt != null && steamAt - Date.now() < plan.waitMs) Object.assign(plan, { kind: 'steam', waitMs: Math.max(0, steamAt - Date.now()) });
