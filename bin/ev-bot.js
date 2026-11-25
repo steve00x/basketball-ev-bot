@@ -180,6 +180,9 @@ async function scan() {
     const syncExecutor = () => {
       botState.pausedUntil = executor?.pausedUntil ? new Date(executor.pausedUntil).toISOString() : null;
       botState.halted = executor?.halted ? (executor.haltReason ?? 'stake mismatch') : null;
+      botState.accountState = Object.fromEntries(accounts.slice(1).map((a) => [a.name, {
+        pausedUntil: a.executor?.pausedUntil ? new Date(a.executor.pausedUntil).toISOString() : null,
+        halted: a.executor?.halted ? (a.executor.haltReason ?? 'stake mismatch') : null }]));
     };
     let papi = null, lastPapi = 0;
     if (s.oddsPapiKey) {

@@ -94,7 +94,9 @@ const cookieKey = (req) => (req.headers.cookie ?? '').split(';').map((c) => c.tr
  */
 export function accountData(accounts, name, state = botState, now = new Date()) {
   const a = accounts.find((x) => x.name === name) ?? accounts[0];
-  const st = { ...state, mode: { ...state.mode, betikaLive: a.s.betikaLive, liveBetsLive: a.s.liveBetsLive } };
+  // pauses and halts belong to each account's own executor
+  const own = a === accounts[0] ? state : { ...state, ...(state.accountState?.[a.name] ?? { pausedUntil: null, halted: null }) };
+  const st = { ...own, mode: { ...state.mode, betikaLive: a.s.betikaLive, liveBetsLive: a.s.liveBetsLive } };
   return { ...dashboardData(a.store, a.s, st, now), account: a.name, accounts: accounts.map((x) => x.name) };
 }
 

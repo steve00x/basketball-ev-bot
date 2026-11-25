@@ -54,4 +54,8 @@ test('dashboard: each account shows its own bets, balance and real-money switch'
   assert.deepEqual([d.account, d.accounts, d.balance, d.mode.betikaLive], ['dad', ['main', 'dad'], 900, false]);
   assert.equal(accountData(accts, null, state).balance, 345);       // main by default
   assert.equal(accountData(accts, 'nobody', state).account, 'main');
+  // the main account's pause is not shown on dad's view, dad's own is
+  const paused = { ...state, pausedUntil: new Date(Date.now() + 600_000).toISOString(), accountState: { dad: { pausedUntil: null, halted: null } } };
+  assert.ok(accountData(accts, 'main', paused).warnings.some((w) => /paused after errors/.test(w.title)));
+  assert.ok(!accountData(accts, 'dad', paused).warnings.some((w) => /paused after errors/.test(w.title)));
 });
