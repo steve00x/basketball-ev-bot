@@ -52,15 +52,19 @@ export class BetikaExecutor {
       return { status: 'skipped', reason: 'bad_settings' };
     }
     if (opp.inPlay && !opp.betikaRef.liveMatchId) return { status: 'skipped', reason: 'no_live_match' };
+    // strategy guard: a strategy whose picks show no edge bets as dry runs until it recovers
+    const paused = this.pausedStrategy?.(opp) ?? null;
+    if (paused && this.s.betikaLive) this.log.info?.(`betika: ${selection(opp)} - strategy paused (${paused}), dry run`);
     const bet = {
       parentMatchId: opp.betikaRef.parentMatchId, ...betikaPick(opp),
       ...(opp.inPlay ? { liveMatchId: opp.betikaRef.liveMatchId } : {}),
       minOdds: round3(minOdds), minEffectiveOdds: round3(minEffective),
       // in-play bets are real only when LIVE_BETS_LIVE is also on (dry run otherwise)
-      stake, live: this.s.betikaLive && (!opp.inPlay || this.s.liveBetsLive) && !opp.dryRunOnly,
+      stake, live: this.s.betikaLive && (!opp.inPlay || this.s.liveBetsLive) && !opp.dryRunOnly && !paused,
     };
 
     let result;
+    const t0 = Date.now();
     try {
       result = await this.client.placeBet(bet);
       this.consecutiveErrors = 0;
@@ -83,6 +87,7 @@ export class BetikaExecutor {
       fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}),
       ...(opp.model?.kind ? { model: opp.model.kind } : {}), ...(opp.steam ? { steam: opp.steam.move } : {}),
       ...(opp.model?.kind === 'inplay-model' ? { modelState: { minute: opp.model.minute, score: opp.model.score } } : {}),
+      placeMs: Date.now() - t0, ...(paused ? { strategyPaused: paused } : {}),
       ...(opp.model?.late ? { late: true } : {}), ...(opp.propKind ? { propKind: opp.propKind } : {}), ...(opp.opener ? { opener: true } : {}),
       ...(opp.inPlay ? { lineAge: opp.lineAgeSeconds, liveScore: opp.betikaRef?.score ?? null, liveClock: opp.betikaRef?.clock ?? null } : {}), ...result,
       // what settlement needs: the game and the exact pick

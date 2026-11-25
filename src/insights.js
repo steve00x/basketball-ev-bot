@@ -147,6 +147,14 @@ export function warnings({ bets, state = {}, s = {}, balance = null, now = new D
     add(balance.amount < stake ? 'critical' : 'warning', `Betika balance low: KES ${balance.amount}`,
       balance.amount < stake ? 'not enough for one bet.' : `about ${Math.floor(balance.amount / stake)} bets left.`);
   }
+  const tax = taxCheck(bets), setTax = s.winningsTax?.betika ?? 0;
+  if (tax && tax.n >= 3 && Math.abs(tax.rate - setTax) > 0.02) {
+    add('critical', `Tax setting wrong: Betika withholds ${Math.round(tax.rate * 100)}% of winnings, the bot assumes ${Math.round(setTax * 100)}%`,
+      `set BETIKA_WINNINGS_TAX=${Math.round(tax.rate * 100) / 100} in .env and restart - until then many "+EV" bets are not +EV after tax.`);
+  }
+  for (const [k, why] of Object.entries(state.pausedStrategies ?? {})) {
+    add('warning', `Strategy paused: ${k}`, `${why} - now dry runs only; it resumes by itself if its picks improve.`);
+  }
   if (state.lastScan?.at && hoursAgo(state.lastScan.at) > 0.25 && state.nextScan?.at && new Date(state.nextScan.at) < now - 5 * 60_000) {
     add('warning', 'No scan for a while', `last scan ${Math.round(hoursAgo(state.lastScan.at) * 60)} min ago - check the terminal.`);
   }
@@ -154,3 +162,72 @@ export function warnings({ bets, state = {}, s = {}, balance = null, now = new D
 }
 
 const round2 = (x) => Math.round(x * 100) / 100;
+
+/**
+ * Tax check from Betika's own bet history: the share of each bet's profit Betika withholds,
+ * wht / (possible win - stake), and from paid-out wins, 1 - (payout - stake) / (stake x odds - stake).
+ * Returns { n, rate, fromWins } (rate = median) or null when there is no data yet.
+ */
+export function taxCheck(bets) {
+  const rates = [], wins = [];
+  for (const b of bets) {
+    if (!b.live || b.status !== 'placed') continue;
+    const stake = b.betikaStake ?? b.stake;
+    if (b.betikaPossibleWin > stake && b.betikaWht != null && (b.betikaWht > 0 || b.betikaStatus === 'won')) {
+      rates.push(b.betikaWht / (b.betikaPossibleWin - stake));
+    } else if (b.betikaStatus === 'won' && b.betikaPayout != null && Number(b.odds) > 1) {
+      const gross = stake * Number(b.odds);
+      if (gross > stake) wins.push(1 - (b.betikaPayout - stake) / (gross - stake));
+    }
+  }
+  const all = [...rates, ...wins].filter((x) => x > -0.05 && x < 0.6).sort((x, y) => x - y);
+  if (!all.length) return null;
+  return { n: all.length, rate: all[Math.floor(all.length / 2)], fromWins: wins.length };
+}
+
+
+/** Which strategy found a pick (works on opportunities and on recorded bets). */
+export function strategyOf(x) {
+  const kind = typeof x.model === 'string' ? x.model : x.model?.kind;
+  const market = x.grade?.market ?? x.market ?? '';
+  if (x.late || x.model?.late) return 'in-play: model 80+ (test)';
+  if (kind === 'inplay-model') return 'in-play: own model';
+  if (x.inPlay) return 'in-play: Pinnacle live';
+  if (market === 'soccer_props') return 'pre-match: soccer goals model';
+  if (/_(h1|q1)$/.test(market)) return 'pre-match: 1st half/quarter';
+  if (kind === 'alt-total' || kind === 'team-total') return 'pre-match: lines model';
+  if (x.steam) return 'pre-match: steam';
+  if (x.opener) return 'pre-match: opener';
+  return 'pre-match: normal';
+}
+
+/**
+ * Strategy guard: strategies whose recent picks show no edge stop betting real money (they keep
+ * running as dry runs, so they can earn their way back). Pre-match: average CLV of the last
+ * GUARD_WINDOW picks with a closing price below GUARD_MIN_CLV, over at least GUARD_MIN_BETS.
+ * In play (no closing line): at least GUARD_MIN_BETS_INPLAY settled picks winning 2+ standard
+ * deviations less often than their fair odds predicted. Returns Map strategy -> reason.
+ */
+export function strategyVerdicts(bets, s) {
+  const pool = [...bets.filter((b) => b.live && b.status === 'placed'), ...firstDryRuns(bets)];
+  const by = new Map();
+  for (const b of pool) { const k = strategyOf(b); if (!by.has(k)) by.set(k, []); by.get(k).push(b); }
+  const paused = new Map();
+  for (const [k, list] of by) {
+    if (k.startsWith('in-play')) {
+      const settled = list.filter((b) => ['won', 'lost'].includes(finalOutcome(b)) && b.fairProb > 0).slice(-s.guardWindow * 2);
+      if (settled.length < s.guardMinBetsInPlay) continue;
+      const won = settled.filter((b) => finalOutcome(b) === 'won').length;
+      const exp = settled.reduce((t, b) => t + b.fairProb, 0);
+      const sd = Math.sqrt(settled.reduce((t, b) => t + b.fairProb * (1 - b.fairProb), 0));
+      const z = sd ? (won - exp) / sd : 0;
+      if (z <= -2) paused.set(k, `won ${won} of ${settled.length}, fair odds predicted ${exp.toFixed(0)} (${z.toFixed(1)} sd)`);
+    } else {
+      const v = list.map(clv).filter((x) => x != null).slice(-s.guardWindow);
+      if (v.length < s.guardMinBets) continue;
+      const avg = v.reduce((t, x) => t + x, 0) / v.length;
+      if (avg < s.guardMinClv) paused.set(k, `CLV ${(avg * 100).toFixed(1)}% over the last ${v.length} picks`);
+    }
+  }
+  return paused;
+}

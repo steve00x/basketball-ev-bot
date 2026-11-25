@@ -101,6 +101,11 @@ export const DEFAULTS = Object.freeze({
   soccerModel: true,           // soccer goals markets (BTTS, team goals, 1X2 & Total, ...) priced by the goals model
   soccerModelMinEv: 0.05,
   soccerModelMaxEv: 0.25,      // above this, more likely a misread market than a real edge: skipped
+  strategyGuard: true,         // stop real bets on a strategy whose recent picks show no edge (keeps dry runs)
+  guardMinBets: 50,            // pre-match: picks with a closing price needed before judging
+  guardMinClv: -0.01,          // pause when their average CLV is below -1%
+  guardWindow: 100,            // judge the most recent picks only
+  guardMinBetsInPlay: 100,     // in play: settled picks needed (then: 2+ sd fewer wins than predicted)
   openers: true,               // re-read Betika between full scans to catch new listings / price changes
   openersPollSeconds: 60,
   openersWindowMinutes: 30,    // picks on markets Betika listed this recently are tagged "opener"
@@ -212,6 +217,11 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     soccerModel: bool('SOCCER_MODEL', d.soccerModel),
     soccerModelMinEv: num('SOCCER_MODEL_MIN_EV', d.soccerModelMinEv),
     soccerModelMaxEv: num('SOCCER_MODEL_MAX_EV', d.soccerModelMaxEv),
+    strategyGuard: bool('STRATEGY_GUARD', d.strategyGuard),
+    guardMinBets: num('GUARD_MIN_BETS', d.guardMinBets),
+    guardMinClv: num('GUARD_MIN_CLV', d.guardMinClv),
+    guardWindow: num('GUARD_WINDOW', d.guardWindow),
+    guardMinBetsInPlay: num('GUARD_MIN_BETS_INPLAY', d.guardMinBetsInPlay),
     openers: bool('OPENERS', d.openers),
     openersPollSeconds: num('OPENERS_POLL_SECONDS', d.openersPollSeconds),
     openersWindowMinutes: num('OPENERS_WINDOW_MINUTES', d.openersWindowMinutes),
@@ -254,7 +264,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['openersPollSeconds', 'openersWindowMinutes', 'soccerModelMinEv', 'soccerModelMaxEv', 'periodHoursBefore', 'periodRefreshMinutes', 'periodGamesPerScan', 'periodDailyCredits', 'liveModelMinEv', 'liveModelMaxMinute', 'liveModelQuietMinutes', 'liveModelMaxAnchorHours', 'steamMinMove', 'steamWindowMinutes', 'steamWatchMinutes', 'steamPollSeconds', 'steamMaxEvents', 'steamDailyCredits', 'liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['guardMinBets', 'guardMinClv', 'guardWindow', 'guardMinBetsInPlay', 'openersPollSeconds', 'openersWindowMinutes', 'soccerModelMinEv', 'soccerModelMaxEv', 'periodHoursBefore', 'periodRefreshMinutes', 'periodGamesPerScan', 'periodDailyCredits', 'liveModelMinEv', 'liveModelMaxMinute', 'liveModelQuietMinutes', 'liveModelMaxAnchorHours', 'steamMinMove', 'steamWindowMinutes', 'steamWatchMinutes', 'steamPollSeconds', 'steamMaxEvents', 'steamDailyCredits', 'liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);

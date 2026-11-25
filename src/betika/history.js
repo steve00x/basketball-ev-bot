@@ -63,16 +63,19 @@ export function readBet(o) {
   const text = o.betStatus?.text ?? (statusKey ? o[statusKey] : null);
   let status = normalizeStatus(o.betStatus?.text);
   if (status === 'unknown') status = normalizeStatus(statusKey ? o[statusKey] : '');
-  let payout = null;
+  let payout = null, tax = null;
   if (o.possible_win != null) {
     const whtKey = Object.keys(o).find((k) => /^wht/i.test(k) && num(o[k]) != null);
-    const tax = whtKey ? num(o[whtKey]) : num(o.tax_amount);
+    tax = whtKey ? num(o[whtKey]) : num(o.tax_amount);
     payout = num(o.possible_win) - (tax ?? 0);
   } else {
     const payoutKey = Object.keys(o).find((k) => PAYOUT_KEYS.test(k));
     payout = payoutKey ? num(o[payoutKey]) : null;
   }
-  return { status, statusText: text == null ? null : String(text), payout: payout == null ? null : Math.round(payout * 100) / 100,
+  const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
+  return { status, statusText: text == null ? null : String(text), payout: r2(payout),
+    // for the tax check: Betika's possible win (before tax), the tax it withholds, the stake it took
+    possibleWin: r2(num(o.possible_win)), wht: r2(tax), stake: r2(num(o.bet_amount ?? o.stake)),
     fields: { status: o.betStatus?.text != null ? 'betStatus.text' : statusKey ?? null } };
 }
 
@@ -107,6 +110,10 @@ export function applyHistory(bets, found, now = new Date()) {
   let updated = 0;
   for (const b of bets) {
     const h = b.betId ? found.get(b.betId) : null;
+    if (h && h.possibleWin != null && (b.betikaPossibleWin !== h.possibleWin || b.betikaWht !== h.wht)) {
+      Object.assign(b, { betikaPossibleWin: h.possibleWin, betikaWht: h.wht, betikaStake: h.stake });
+      if (h.status === 'pending' || h.status === 'unknown') updated++;
+    }
     if (!h || h.status === 'unknown' || h.status === 'pending') continue;
     const stake = b.stake ?? 0;
     const betikaProfit = h.status === 'won' && h.payout != null ? Math.round((h.payout - stake) * 100) / 100

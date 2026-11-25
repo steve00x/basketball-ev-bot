@@ -12,7 +12,8 @@ import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
 import { botState, startDashboard, summarizeOpps } from '../src/dashboard.js';
 import { LiveGuard, confirmLive } from '../src/liveGuard.js';
-import { review } from '../src/review.js';
+import { review, taxLines } from '../src/review.js';
+import { strategyOf, strategyVerdicts } from '../src/insights.js';
 import { anchoredLiveEvents, recordAnchors, runModelCycle } from '../src/inplayModel.js';
 import { SteamTracker } from '../src/steam.js';
 import { PeriodPrices } from '../src/periods.js';
@@ -85,6 +86,9 @@ const makeClient = (overrides = {}) => new BetikaClient({
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stopping = false;
 process.on('SIGINT', () => { if (stopping) process.exit(130); stopping = true; log.info('stopping after this cycle...'); });
+// A crash ends the process with code 1 (the lock is released on exit), so scripts/run-forever.ps1 can restart it.
+process.on('unhandledRejection', (e) => { log.error(`crashed: ${e?.stack ?? e}`); process.exit(1); });
+process.on('uncaughtException', (e) => { log.error(`crashed: ${e?.stack ?? e}`); process.exit(1); });
 
 async function scan() {
   const notifier = new Notifier(s);
@@ -113,6 +117,7 @@ async function scan() {
     if (s.betikaLive) await client.ensureLoggedIn();
     if (s.betikaLive) await refreshBalance(client, store, log);
     executor = new BetikaExecutor(s, client, store, { log, notify: (t) => notifier.sendText(t) });
+    executor.pausedStrategy = (opp) => (s.strategyGuard ? botState.pausedStrategies?.[strategyOf(opp)] ?? null : null);
     log.info(`betika: ${s.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - bet slips are filled, never submitted'}`
       + ` | winnings tax ${(s.winningsTax.betika * 100).toFixed(0)}%`);
   }
@@ -159,6 +164,16 @@ async function scan() {
     let lastEvents = null, lastEventsAt = 0, lastBetika = 0;
     const steamMarkets = (sport) => ['h2h', 'totals', 'spreads'].filter((m) => marketsFor(sport, s).includes(m));
     let lastSettle = 0;
+    // strategy guard: re-judged at start-up and after each hourly settle
+    const judge = () => {
+      if (!s.strategyGuard) return;
+      const v = strategyVerdicts(store.data.bets, s);
+      const before = new Set(Object.keys(botState.pausedStrategies ?? {}));
+      botState.pausedStrategies = Object.fromEntries(v);
+      for (const [k, why] of v) if (!before.has(k)) log.warn(`strategy guard: pausing real bets on "${k}" - ${why} (dry runs continue)`);
+      for (const k of before) if (!v.has(k)) log.info(`strategy guard: "${k}" picks improved - real bets resume`);
+    };
+    judge();
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
     let kind = 'full';
     while (!stopping) {
@@ -257,6 +272,7 @@ async function scan() {
         }
         // the real balance (winnings paid in, deposits, bets placed by hand) for the dashboard
         if (client && s.betikaLive) await refreshBalance(client, store, log);
+        judge();
       }
       if (opt.once) break; // keep scanning even if betting is halted, so alerts keep coming
       const plan = nextScanPlan({ now: Date.now(), lastFull, s, upcoming });
@@ -427,6 +443,7 @@ const commands = {
   // Bad luck or bad prices? Wins you got vs wins the fair odds predicted, per group (reads the bet log only)
   review: async () => {
     const store = new Store(s.storePath, { log });
+    console.log(taxLines(store.data.bets, s.winningsTax.betika ?? 0).join('\n') + '\n');
     console.log(review(store.data.bets));
     return 0;
   },

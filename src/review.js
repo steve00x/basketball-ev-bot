@@ -1,6 +1,7 @@
 // `ev-bot review`: is the bot losing because of bad luck, or because the "edges" aren't real?
 // Compares the wins you got with the wins the fair (Pinnacle) odds predicted, per group of bets.
-import { clv } from './insights.js';
+import { clv, strategyOf, taxCheck } from './insights.js';
+export { taxCheck };
 import { finalOutcome, firstDryRuns } from './settle.js';
 import { marketLabel, sportLabel } from './insights.js';
 
@@ -75,7 +76,41 @@ export function review(bets) {
   out.push(...table('In-play by sport:', ip, sportLabel), '');
   out.push(...table('In-play by market:', ip, marketLabel), '');
   out.push(...table('Pre-match by sport (real money):', inPlay(real, false), sportLabel), '');
-  const how = (b) => (b.late ? 'in-play: model 80+ (test)' : b.model === 'inplay-model' ? 'in-play: own model' : b.inPlay ? 'in-play: Pinnacle live' : b.steam ? 'pre-match: steam' : b.opener ? 'pre-match: opener' : b.market === 'soccer_props' || b.grade?.market === 'soccer_props' ? 'pre-match: soccer goals model' : 'pre-match: normal');
-  out.push(...table('By strategy (real + dry runs):', [...real, ...dry], how), '');
+  out.push(...table('By strategy (real + dry runs):', [...real, ...dry], strategyOf), '');
+  out.push(...placement(bets), '');
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export function taxLines(bets, setting) {
+  const t = taxCheck(bets);
+  if (!t) return ['TAX CHECK: no Betika history with tax details yet - it fills in after the hourly Betika history check'];
+  const pct = (x) => `${Math.round(x * 100)}%`;
+  const out = [`TAX CHECK: Betika withholds about ${pct(t.rate)} of the profit on winning bets (${t.n} bets checked)`];
+  if (Math.abs(t.rate - setting) > 0.02) {
+    out.push(`  !! the bot prices bets with BETIKA_WINNINGS_TAX=${setting} - set BETIKA_WINNINGS_TAX=${Math.round(t.rate * 100) / 100} in .env`,
+      `     otherwise it bets "edges" that are gone after tax (at odds 2.0, ${pct(t.rate)} tax on profit costs ${pct(t.rate / 2)} of EV)`);
+  } else out.push(`  matches BETIKA_WINNINGS_TAX=${setting}: OK`);
+  return out;
+}
+
+/**
+ * Bet placement: of the bets the bot tried to place, how many went through at the price wanted,
+ * and how long it took. Lots of "price moved" means the bot is too slow for that strategy.
+ */
+export function placement(bets) {
+  const tried = bets.filter((b) => b.status && b.status !== 'skipped' && b.at);
+  if (!tried.length) return [];
+  const groups = new Map();
+  for (const b of tried) { const k = strategyOf(b); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(b); }
+  const median = (xs) => { const v = xs.filter((x) => x != null).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : null; };
+  const rows = [...groups].sort((a, b) => b[1].length - a[1].length).map(([k, bs]) => {
+    const n = (st) => bs.filter((b) => st.includes(b.status)).length;
+    const ok = n(['placed', 'dry_run']), moved = n(['price_moved']), rej = n(['rejected']);
+    const other = bs.length - ok - moved - rej;
+    const secs = median(bs.filter((b) => ['placed', 'dry_run'].includes(b.status)).map((b) => b.placeMs));
+    return `  ${k.padEnd(30)} ${String(bs.length).padStart(4)} tries  ${String(Math.round(ok / bs.length * 100)).padStart(3)}% through`
+      + `  price moved ${String(moved).padStart(3)}  rejected ${String(rej).padStart(3)}  other ${String(other).padStart(3)}`
+      + `  ${secs == null ? '' : `median ${(secs / 1000).toFixed(1)} s`}`;
+  });
+  return ['Bet placement (all attempts) - many "price moved" or "rejected" means the edge is gone before the bet lands:', ...rows];
 }

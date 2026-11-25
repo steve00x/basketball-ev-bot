@@ -16,7 +16,8 @@ test('reads Betika /v1/uo/bethistory bets (real field names): betStatus.text fir
     { short_bet_id: 'PEND01', bet_id: '6700000002', bet_amount: '40.00', possible_win: '86.00', status: '0', betStatus: { text: 'Pending' } },
     { short_bet_id: 'ZZZ111', bet_id: '1', bet_amount: '5', possible_win: '9', status: '1', betStatus: { text: 'Won' } }] };
   const found = matchHistory([page], [{ short: 'LDCH8C', long: 6691062283 }, { short: 'LR3HDC' }, { short: 'PEND01' }, { short: 'NOPE', long: 2 }]);
-  assert.deepEqual(found.get('LDCH8C'), { status: 'won', statusText: 'Won', payout: 19.76, fields: { status: 'betStatus.text' } });
+  assert.deepEqual(found.get('LDCH8C'), { status: 'won', statusText: 'Won', payout: 19.76, possibleWin: 22.2, wht: 2.44, stake: 10,
+    fields: { status: 'betStatus.text' } });
   assert.equal(found.get('LR3HDC').status, 'lost');
   assert.equal(found.get('PEND01').status, 'pending');
   assert.equal(found.has('NOPE'), false);

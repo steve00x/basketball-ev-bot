@@ -4,3 +4,4 @@ node_modules/
 ev-bot-store.json*
 discover/
 oddspapi-cache.json
+logs/
