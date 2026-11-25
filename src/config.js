@@ -102,6 +102,7 @@ export const DEFAULTS = Object.freeze({
   periodHoursBefore: 3,        // only for games starting within this many hours
   periodRefreshMinutes: 20,    // each game's Pinnacle period prices at most this often
   periodGamesPerScan: 3,
+  periodQuarters: false,       // 1st quarter prices too (rarely pair with Betika's single line)
   periodDailyCredits: 400,
   steam: true,                 // follow sharp Pinnacle moves (pre-match)
   steamMinMove: 0.03,          // a move of 3 percentage points of fair probability...
@@ -206,6 +207,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     periodHoursBefore: num('PERIOD_HOURS_BEFORE', d.periodHoursBefore),
     periodRefreshMinutes: num('PERIOD_REFRESH_MINUTES', d.periodRefreshMinutes),
     periodGamesPerScan: num('PERIOD_GAMES_PER_SCAN', d.periodGamesPerScan),
+    periodQuarters: bool('PERIOD_QUARTERS', d.periodQuarters),
     periodDailyCredits: num('PERIOD_DAILY_CREDITS', d.periodDailyCredits),
     steam: bool('STEAM', d.steam),
     steamMinMove: num('STEAM_MIN_MOVE', d.steamMinMove),

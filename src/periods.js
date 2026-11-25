@@ -23,7 +23,10 @@ export class PeriodPrices {
     if (!s.periodMarkets) return { games: 0 };
     const day = new Date(now).toDateString();
     if (this.spent.day !== day) this.spent = { day, credits: 0 };
-    const wanted = (e) => (e.bookmakers.find((b) => b.key === 'betika')?.markets ?? []).map((m) => m.key).filter((k) => PERIOD_KEY.test(k));
+    // 1st quarter: Pinnacle's line is usually a whole number and Betika has one line, so they almost
+    // never pair - not worth a credit unless PERIOD_QUARTERS=true
+    const wanted = (e) => (e.bookmakers.find((b) => b.key === 'betika')?.markets ?? []).map((m) => m.key)
+      .filter((k) => PERIOD_KEY.test(k) && (s.periodQuarters || !k.endsWith('_q1')));
     const due = events
       .filter((e) => PERIOD_SPORTS.includes(e.sport_key) && e.betikaRef && wanted(e).length)
       .filter((e) => { const t = new Date(e.commence_time) - now; return t > 0 && t <= s.periodHoursBefore * 3600_000; })

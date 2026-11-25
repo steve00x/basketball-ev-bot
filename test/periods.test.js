@@ -68,11 +68,12 @@ test('period prices: only games Betika lists them for, starting soon, not too of
   const pp = new PeriodPrices(api, s, { info() {}, warn() {} });
   const r = await pp.enrich([soon, later], +NOW);
   assert.deepEqual(calls.map((c) => c[0]), ['nba1']);                       // 'later' starts in 12 h
-  assert.deepEqual(calls[0][1].sort(), ['team_totals_h1', 'totals_h1', 'totals_q1']);
-  assert.deepEqual([r.got, r.asked], [1, 3]);
+  assert.deepEqual(calls[0][1].sort(), ['team_totals_h1', 'totals_h1']);   // quarters off by default
+  assert.deepEqual([r.got, r.asked], [1, 2]);
   assert.ok(soon.bookmakers.find((b) => b.key === 'pinnacle').markets.some((x) => x.key === 'totals_h1'));
   await pp.enrich([soon], +NOW + 5 * 60_000);                               // too soon again
   assert.equal(calls.length, 1);
+  pp.spent.credits = 2;
   await pp.enrich([soon], +NOW + 25 * 60_000);                              // would pass 3 credits today
   assert.equal(calls.length, 1);
 });
