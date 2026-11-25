@@ -65,14 +65,38 @@ export function fitGoals({ pH, pA, line, pOver: po }) {
   return { lH: total * share, lA: total * (1 - share), total };
 }
 
+// Stoppage time is not known in advance. Typical spreads in today's game (minutes added -> chance):
+// first half about 3 on average, second half about 7, sometimes 10 or more.
+export const ADDED_1 = [[1, 0.12], [2, 0.25], [3, 0.25], [4, 0.17], [5, 0.11], [6, 0.06], [7, 0.04]];
+export const ADDED_2 = [[3, 0.04], [4, 0.08], [5, 0.13], [6, 0.17], [7, 0.17], [8, 0.14], [9, 0.10], [10, 0.07], [11, 0.05], [13, 0.05]];
+const mean = (d) => d.reduce((t, [a, p]) => t + a * p, 0);
+
+/** Expected stoppage minutes still to play when `x` minutes of it have gone (and the half is still on). */
+export function addedLeft(dist, x) {
+  if (x <= 0) return mean(dist) - Math.max(0, x) ;
+  const left = dist.filter(([a]) => a > x);
+  const p = left.reduce((t, [, q]) => t + q, 0);
+  if (!p) return 0.5; // beyond every usual length: the whistle is due any moment
+  return left.reduce((t, [a, q]) => t + (a - x) * q, 0) / p;
+}
+
 /**
  * Share of a match's goals still to come at this point. About 45% of goals come in the first half
- * and 55% in the second; with stoppage time a half runs about 47 and 50 minutes.
+ * and 55% in the second, spread evenly over each half including its (uncertain) stoppage time.
+ * `minute` may have a fraction (93.5 = 93:30).
  */
 export function remainingShare(minute, half) {
+  const len1 = 45 + mean(ADDED_1), len2 = 45 + mean(ADDED_2);
+  const rate1 = 0.45 / len1, rate2 = 0.55 / len2;
   if (half === 'ht') return 0.55;
-  if (half === 1) return 0.45 * (1 - Math.min(minute, 47) / 47) + 0.55;
-  if (half === 2) return 0.55 * (1 - Math.min(Math.max(minute - 45, 0), 50) / 50);
+  if (half === 1) {
+    const left = minute <= 45 ? 45 - minute + mean(ADDED_1) : addedLeft(ADDED_1, minute - 45);
+    return rate1 * left + 0.55;
+  }
+  if (half === 2) {
+    const left = minute <= 90 ? 90 - Math.max(minute, 45) + mean(ADDED_2) : addedLeft(ADDED_2, minute - 90);
+    return rate2 * left;
+  }
   return null;
 }
 
@@ -81,7 +105,8 @@ export function readLive(ref) {
   const period = String(ref?.period ?? '').toLowerCase();
   const half = /^1st half/.test(period) ? 1 : /^2nd half/.test(period) ? 2 : /half ?time|^ht$|pause|break/.test(period) ? 'ht' : null;
   if (!half) return null; // not started, extra time, penalties, interrupted...
-  const minute = half === 'ht' ? 45 : parseInt(String(ref.clock ?? ''), 10);
+  const clock = String(ref.clock ?? '').match(/^(\d+)(?::(\d+))?/);
+  const minute = half === 'ht' ? 45 : clock ? Number(clock[1]) + (clock[2] ? Number(clock[2]) / 60 : 0) : NaN;
   if (!Number.isFinite(minute)) return null;
   const m = String(ref.score ?? '').match(/^(\d+)\s*[:-]\s*(\d+)$/);
   if (!m) return null;
@@ -151,7 +176,9 @@ export function modelBook(event, s, now = new Date(), quietSince = null) {
   if ((new Date(a.commence) - new Date(a.at)) / 3600_000 > s.liveModelMaxAnchorHours) return { skip: 'no_recent_prematch_price' };
   const st = readLive(ref);
   if (!st) return { skip: 'match_state_unknown' };
-  if (st.minute >= s.liveModelMaxMinute) return { skip: 'too_late_in_match' };
+  // after LIVE_MODEL_MAX_MINUTE: priced only as a dry-run test (LIVE_MODEL_LATE_TEST), never real money
+  const late = st.minute >= s.liveModelMaxMinute;
+  if (late && !s.liveModelLateTest) return { skip: 'too_late_in_match' };
   if (quietSince != null && (+now - quietSince) / 60_000 < s.liveModelQuietMinutes) return { skip: 'recent_goal' };
   const share = remainingShare(st.minute, st.half);
   const { lH, lA } = fitGoals(a);
@@ -174,7 +201,7 @@ export function modelBook(event, s, now = new Date(), quietSince = null) {
   }
   if (totals.length) markets.push({ key: 'totals', last_update: ts, outcomes: totals });
   if (!markets.length) return { skip: 'nothing_to_price' };
-  return { book: { key: 'model', title: 'Model', last_update: ts, markets }, info: { minute: st.minute, score: `${st.hs}-${st.as}`, share, lH, lA } };
+  return { book: { key: 'model', title: 'Model', last_update: ts, markets }, info: { minute: Math.floor(st.minute), score: `${st.hs}-${st.as}`, share, lH, lA, late } };
 }
 
 /**
@@ -200,8 +227,18 @@ export async function runModelCycle({ store, s, feed, executor, notifier, log, g
   log.info(`live model: ${events.length} soccer games with a pre-match price, ${ready.length} priced${why ? ` (skipped: ${why})` : ''}`);
   if (!ready.length) return { found: 0, all: [], inPlay: events.length };
   const byId = new Map(ready.map((e) => [e.id, e]));
+  const decorate = (o) => {
+    o.model = { kind: 'inplay-model', ...byId.get(o.eventId)?.modelInfo };
+    o.minEv = s.liveModelMinEv;
+    if (o.model.late) { o.dryRunOnly = true; o.minOddsFloor = 1.01; } // late-game test: never real money; short odds allowed
+  };
   const ms = { ...s, sharpBooks: ['model'], liveMinEv: s.liveModelMinEv, liveMaxOddsAgeSeconds: 120 };
-  const r = await runCycle({ events: ready, s: ms, store, notifier, betika: null, executor, log, live: true, guard, confirm: null, now,
-    decorate: (o) => { o.model = { kind: 'inplay-model', ...byId.get(o.eventId)?.modelInfo }; o.minEv = s.liveModelMinEv; } });
+  const base = { store, notifier, betika: null, executor, log, live: true, guard, confirm: null, now, decorate };
+  const normal = ready.filter((e) => !e.modelInfo.late), late = ready.filter((e) => e.modelInfo.late);
+  const runs = [];
+  if (normal.length) runs.push(await runCycle({ ...base, events: normal, s: ms }));
+  if (late.length) runs.push(await runCycle({ ...base, events: late, s: { ...ms, minDecimalOdds: 1.01 } }));
+  const r = { found: runs.reduce((t, x) => t + x.found, 0), all: runs.flatMap((x) => x.all), opps: runs.flatMap((x) => x.opps),
+    closest: runs[0]?.closest ?? null, results: runs.flatMap((x) => x.results) };
   return { ...r, inPlay: events.length };
 }

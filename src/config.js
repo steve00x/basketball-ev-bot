@@ -95,6 +95,7 @@ export const DEFAULTS = Object.freeze({
   liveModel: true,             // in-play soccer priced by our own model (pre-match Pinnacle + live score/minute)
   liveModelMinEv: 0.06,
   liveModelMaxMinute: 80,
+  liveModelLateTest: true,     // after LIVE_MODEL_MAX_MINUTE, keep pricing as DRY RUNS only (late-goal test)
   liveModelQuietMinutes: 3,    // no model bets this soon after a goal
   liveModelMaxAnchorHours: 3,  // the pre-match Pinnacle price must be from the last 3 h before kick-off
   steam: true,                 // follow sharp Pinnacle moves (pre-match)
@@ -193,6 +194,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     liveModel: bool('LIVE_MODEL', d.liveModel),
     liveModelMinEv: num('LIVE_MODEL_MIN_EV', d.liveModelMinEv),
     liveModelMaxMinute: num('LIVE_MODEL_MAX_MINUTE', d.liveModelMaxMinute),
+    liveModelLateTest: bool('LIVE_MODEL_LATE_TEST', d.liveModelLateTest),
     liveModelQuietMinutes: num('LIVE_MODEL_QUIET_MINUTES', d.liveModelQuietMinutes),
     liveModelMaxAnchorHours: num('LIVE_MODEL_MAX_ANCHOR_HOURS', d.liveModelMaxAnchorHours),
     steam: bool('STEAM', d.steam),

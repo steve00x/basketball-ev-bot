@@ -64,7 +64,7 @@ export function marketLabel(b) {
     team_totals: b.model === 'team-total' ? 'Team totals (model)' : 'Team totals',
     double_chance: 'Double chance', draw_no_bet: 'Draw no bet',
   }[g.market] ?? (g.market ? String(g.market).replace(/_/g, ' ') : 'Other');
-  if (b.model === 'inplay-model') return 'In-play model ' + name;
+  if (b.model === 'inplay-model') return (b.late ? 'In-play model 80+ (test) ' : 'In-play model ') + name;
   return (b.inPlay ? 'In-play ' : '') + name + (b.steam ? ' (steam)' : '');
 }
 

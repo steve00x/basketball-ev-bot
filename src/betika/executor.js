@@ -45,7 +45,7 @@ export class BetikaExecutor {
     // in play the stricter LIVE_MIN_EV applies here too, not just in the scan
     const minEv = opp.minEv ?? (opp.inPlay ? Math.max(this.s.liveMinEv ?? 0, this.s.minEv) : this.s.minEv);
     const minEffective = (1 + minEv - (opp.pushProb ?? 0)) / opp.fairProb;
-    const minOdds = Math.max(beforeTax(minEffective, opp.winningsTax ?? 0), this.s.minDecimalOdds);
+    const minOdds = Math.max(beforeTax(minEffective, opp.winningsTax ?? 0), opp.minOddsFloor ?? this.s.minDecimalOdds);
     const round3 = (x) => Math.ceil(x * 1000) / 1000;
     if (!Number.isFinite(minOdds) || !Number.isFinite(minEffective) || !Number.isFinite(opp.fairProb)) {
       this.log.error?.(`betika: refusing ${selection(opp)} - price floor is not a number (check MIN_EV / tax settings)`);
@@ -57,7 +57,7 @@ export class BetikaExecutor {
       ...(opp.inPlay ? { liveMatchId: opp.betikaRef.liveMatchId } : {}),
       minOdds: round3(minOdds), minEffectiveOdds: round3(minEffective),
       // in-play bets are real only when LIVE_BETS_LIVE is also on (dry run otherwise)
-      stake, live: this.s.betikaLive && (!opp.inPlay || this.s.liveBetsLive),
+      stake, live: this.s.betikaLive && (!opp.inPlay || this.s.liveBetsLive) && !opp.dryRunOnly,
     };
 
     let result;
@@ -83,6 +83,7 @@ export class BetikaExecutor {
       fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}),
       ...(opp.model?.kind ? { model: opp.model.kind } : {}), ...(opp.steam ? { steam: opp.steam.move } : {}),
       ...(opp.model?.kind === 'inplay-model' ? { modelState: { minute: opp.model.minute, score: opp.model.score } } : {}),
+      ...(opp.model?.late ? { late: true } : {}),
       ...(opp.inPlay ? { lineAge: opp.lineAgeSeconds, liveScore: opp.betikaRef?.score ?? null, liveClock: opp.betikaRef?.clock ?? null } : {}), ...result,
       // what settlement needs: the game and the exact pick
       grade: { sport: opp.sport, eventId: opp.eventId, commenceTime: opp.commenceTime ? new Date(opp.commenceTime).toISOString() : null,

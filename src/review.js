@@ -75,7 +75,7 @@ export function review(bets) {
   out.push(...table('In-play by sport:', ip, sportLabel), '');
   out.push(...table('In-play by market:', ip, marketLabel), '');
   out.push(...table('Pre-match by sport (real money):', inPlay(real, false), sportLabel), '');
-  const how = (b) => (b.model === 'inplay-model' ? 'in-play: own model' : b.inPlay ? 'in-play: Pinnacle live' : b.steam ? 'pre-match: steam' : 'pre-match: normal');
+  const how = (b) => (b.late ? 'in-play: model 80+ (test)' : b.model === 'inplay-model' ? 'in-play: own model' : b.inPlay ? 'in-play: Pinnacle live' : b.steam ? 'pre-match: steam' : 'pre-match: normal');
   out.push(...table('By strategy (real + dry runs):', [...real, ...dry], how), '');
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
