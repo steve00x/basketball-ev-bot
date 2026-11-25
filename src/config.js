@@ -89,6 +89,9 @@ export const DEFAULTS = Object.freeze({
   liveIdleCheckSeconds: 600,   // how often to look for games in progress when none are on
   liveMinEv: 0.05,
   liveMaxOddsAgeSeconds: 30,   // Pinnacle's live price must be this fresh
+  liveMaxEv: 0.15,             // in play, a bigger "edge" is almost always a stale price: skip it
+  liveScoreSettleSeconds: 10,  // Pinnacle must have priced the game this long after the score last changed
+  liveConfirm: true,           // re-check with a fresh Pinnacle price right before an in-play bet (1 credit)
   liveMaxHoursSinceStart: 4,
   // OddsPapi: second Pinnacle source, used only when The Odds API finds fewer than N +EV bets
   oddsPapiKey: '',
@@ -172,6 +175,9 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     liveIdleCheckSeconds: num('LIVE_IDLE_CHECK_SECONDS', d.liveIdleCheckSeconds),
     liveMinEv: num('LIVE_MIN_EV', d.liveMinEv),
     liveMaxOddsAgeSeconds: num('LIVE_MAX_ODDS_AGE_SECONDS', d.liveMaxOddsAgeSeconds),
+    liveMaxEv: num('LIVE_MAX_EV', d.liveMaxEv),
+    liveScoreSettleSeconds: num('LIVE_SCORE_SETTLE_SECONDS', d.liveScoreSettleSeconds),
+    liveConfirm: bool('LIVE_CONFIRM', d.liveConfirm),
     liveMaxHoursSinceStart: num('LIVE_MAX_HOURS_SINCE_START', d.liveMaxHoursSinceStart),
     oddsPapiKey: str('ODDSPAPI_KEY', ''),
     oddsPapiWhenFewerThan: num('ODDSPAPI_WHEN_FEWER_THAN', d.oddsPapiWhenFewerThan),
@@ -198,7 +204,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);

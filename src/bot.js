@@ -201,7 +201,11 @@ export async function fetchLiveEvents(api, s, log = console) {
 export const liveSettings = (s) => ({ ...s, inPlay: true, minEv: Math.max(s.liveMinEv, s.minEv),
   maxLineAgeSeconds: s.liveMaxOddsAgeSeconds, altTotals: false, teamTotals: false });
 
-export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false }) {
+/**
+ * One scan + bet pass. In play, `guard` (LiveGuard) blocks picks priced before the current score
+ * and `confirm(opp, event, scanSettings)` re-prices a pick with a fresh Pinnacle price before betting.
+ */
+export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false, guard = null, confirm = null }) {
   if (live) s = liveSettings(s);
   if (betika) {
     try {
@@ -215,6 +219,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
       log.error(`betika: could not read odds: ${e.message}`);
     }
   }
+  if (live && guard) guard.observe(events);
   const scanSettings = { ...s, targetBooks: bookPlan(s).scanTargets };
   const opps = scanEvents(events, scanSettings);
   if (s.betikaFixedStake > 0) for (const o of opps) if (o.book === 'betika') o.stake = s.betikaFixedStake; // alerts show the real stake
@@ -241,7 +246,26 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   if (executor) {
     // Every current opportunity not yet bet gets a try, not only new alerts: one skipped earlier
     // (stake too small, price moved, error) can qualify now. Already-placed bets are skipped.
-    for (const o of opps) if (o.book === 'betika') results.push({ opp: o, result: await executor.execute(o) });
+    const byId = new Map(events.map((e) => [e.id, e]));
+    for (let o of opps) {
+      if (o.book !== 'betika') continue;
+      if (o.inPlay) {
+        // in play: only when Pinnacle has priced the current score, then once more with a fresh price
+        const why = guard?.check(o);
+        if (why) { results.push({ opp: o, result: { status: 'skipped', reason: why } }); continue; }
+        if (confirm && !store.hasBet(dedupeKey(o)) && !executor.check(o, s.betikaFixedStake || o.stake)) {
+          const c = await confirm(o, byId.get(o.eventId), scanSettings);
+          const why2 = c.opp ? guard?.check(c.opp) : c.reason;
+          if (why2) {
+            log.info(`live: skip ${selection(o)} (${why2.replace(/_/g, ' ')}${c.error ? `: ${c.error}` : ''})`);
+            results.push({ opp: o, result: { status: 'skipped', reason: why2 } });
+            continue;
+          }
+          o = c.opp;
+        }
+      }
+      results.push({ opp: o, result: await executor.execute(o) });
+    }
     if (results.length) {
       const count = {};
       for (const { result: r } of results) { const k = r.status === 'skipped' ? r.reason : r.status; count[k] = (count[k] ?? 0) + 1; }

@@ -42,7 +42,9 @@ export class BetikaExecutor {
     }
     // Lowest after-tax price that still clears MIN_EV, and the posted price that gives it.
     // Lowest real price giving MIN_EV: pWin x odds + pPush - 1 >= MIN_EV (pPush = refund chance, Draw No Bet).
-    const minEffective = (1 + this.s.minEv - (opp.pushProb ?? 0)) / opp.fairProb;
+    // in play the stricter LIVE_MIN_EV applies here too, not just in the scan
+    const minEv = opp.inPlay ? Math.max(this.s.liveMinEv ?? 0, this.s.minEv) : this.s.minEv;
+    const minEffective = (1 + minEv - (opp.pushProb ?? 0)) / opp.fairProb;
     const minOdds = Math.max(beforeTax(minEffective, opp.winningsTax ?? 0), this.s.minDecimalOdds);
     const round3 = (x) => Math.ceil(x * 1000) / 1000;
     if (!Number.isFinite(minOdds) || !Number.isFinite(minEffective) || !Number.isFinite(opp.fairProb)) {
@@ -79,7 +81,8 @@ export class BetikaExecutor {
       key: dedupeKey(opp), at: new Date().toISOString(), matchup: matchup(opp),
       selection: selection(opp), stake, minOdds: bet.minOdds, expectedOdds: opp.decimal,
       fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}),
-      ...(opp.model?.kind ? { model: opp.model.kind } : {}), ...result,
+      ...(opp.model?.kind ? { model: opp.model.kind } : {}),
+      ...(opp.inPlay ? { lineAge: opp.lineAgeSeconds, liveScore: opp.betikaRef?.score ?? null, liveClock: opp.betikaRef?.clock ?? null } : {}), ...result,
       // what settlement needs: the game and the exact pick
       grade: { sport: opp.sport, eventId: opp.eventId, commenceTime: opp.commenceTime ? new Date(opp.commenceTime).toISOString() : null,
         homeTeam: opp.homeTeam, awayTeam: opp.awayTeam, market: opp.market, outcome: opp.outcome, point: opp.point ?? null,

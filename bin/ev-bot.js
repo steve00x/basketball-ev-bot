@@ -11,6 +11,8 @@ import { Notifier } from '../src/notifier.js';
 import { OddsAPI, OddsAPIError } from '../src/oddsApi.js';
 import { Store, acquireLock } from '../src/store.js';
 import { botState, startDashboard, summarizeOpps } from '../src/dashboard.js';
+import { LiveGuard, confirmLive } from '../src/liveGuard.js';
+import { review } from '../src/review.js';
 import { settlePending } from '../src/settle.js';
 import { applyHistory, historyShape, matchHistory, statusWords } from '../src/betika/history.js';
 import { OddsPapi, OddsPapiError, mergeEvents, summarizeAccount } from '../src/oddsPapi.js';
@@ -30,6 +32,7 @@ Commands:
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
   balance     print the Betika account balance
+  review      bad luck or bad prices? wins vs what the fair odds predicted
   discover    visible browser that records Betika API calls to ./discover/
 
 Options:
@@ -136,6 +139,7 @@ async function scan() {
     const fastGroups = s.fastScanSports;
     let lastFull = 0;
     let lastLive = 0, liveActive = false;
+    const liveGuard = new LiveGuard(s);
     let lastSettle = 0;
     let upcoming = []; // start times of fast-sport games, for pre-start fast scans
     let kind = 'full';
@@ -150,7 +154,10 @@ async function scan() {
           events = await fetchLiveEvents(api, s, log);
           lastLive = Date.now();
           liveActive = events.length > 0;
-          if (liveActive) track(await runCycle({ events, s, store, notifier, betika: feed, executor, log, live: true }), 'live');
+          if (liveActive) {
+            track(await runCycle({ events, s, store, notifier, betika: feed, executor, log, live: true, guard: liveGuard,
+              confirm: s.liveConfirm ? (o, ev, ss) => confirmLive(api, s, o, ev, ss) : null }), 'live');
+          }
           else botState.credits = api.requestsRemaining;
           events = null;
         } else {
@@ -323,6 +330,13 @@ const commands = {
         return 1;
       }
     });
+  },
+
+  // Bad luck or bad prices? Wins you got vs wins the fair odds predicted, per group (reads the bet log only)
+  review: async () => {
+    const store = new Store(s.storePath, { log });
+    console.log(review(store.data.bets));
+    return 0;
   },
 
   // Grade finished bets now from final scores and print the totals.
