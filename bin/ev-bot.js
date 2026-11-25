@@ -580,7 +580,7 @@ const commands = {
   login: () => withBrowser(async (c) => {
     log.info('complete any OTP/captcha in the browser window (3 min)...');
     await c.ensureLoggedIn({ waitMs: 180_000 });
-    log.info(`logged in, balance: ${await c.balance() ?? 'unknown'} - session saved to ${s.betikaSessionDir}`);
+    log.info(`logged in, balance: ${await c.readBalance().catch(() => null) ?? 'unknown'} - session saved to ${s.betikaSessionDir}`);
     return 0;
   }, { headless: false }),
 
