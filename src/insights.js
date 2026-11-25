@@ -149,8 +149,9 @@ export function warnings({ bets, state = {}, s = {}, balance = null, now = new D
   }
   const tax = taxCheck(bets), setTax = s.winningsTax?.betika ?? 0;
   if (tax && tax.n >= 3 && Math.abs(tax.rate - setTax) > 0.02) {
-    add('critical', `Tax setting wrong: Betika withholds ${Math.round(tax.rate * 100)}% of winnings, the bot assumes ${Math.round(setTax * 100)}%`,
-      `set BETIKA_WINNINGS_TAX=${Math.round(tax.rate * 100) / 100} in .env and restart - until then many "+EV" bets are not +EV after tax.`);
+    const title = `Tax setting differs: Betika withheld ${Math.round(tax.rate * 100)}% of winnings (${tax.n} bets), the bot assumes ${Math.round(setTax * 100)}%`;
+    if (setTax < tax.rate) add('critical', title, `set BETIKA_WINNINGS_TAX=${Math.round(tax.rate * 100) / 100} in .env and restart - until then many "+EV" bets are not +EV after tax.`);
+    else add('warning', title, `the bot skips some good bets. Check one won bet on Betika (paid vs stake x odds), then set BETIKA_WINNINGS_TAX=${Math.round(tax.rate * 100) / 100} - run review to see the bets checked.`);
   }
   for (const [k, why] of Object.entries(state.pausedStrategies ?? {})) {
     add('warning', `Strategy paused: ${k}`, `${why} - now dry runs only; it resumes by itself if its picks improve.`);
@@ -169,20 +170,26 @@ const round2 = (x) => Math.round(x * 100) / 100;
  * Returns { n, rate, fromWins } (rate = median) or null when there is no data yet.
  */
 export function taxCheck(bets) {
-  const rates = [], wins = [];
+  const rates = [], wins = [], examples = [];
   for (const b of bets) {
     if (!b.live || b.status !== 'placed') continue;
     const stake = b.betikaStake ?? b.stake;
     if (b.betikaPossibleWin > stake && b.betikaWht != null && (b.betikaWht > 0 || b.betikaStatus === 'won')) {
       rates.push(b.betikaWht / (b.betikaPossibleWin - stake));
+      examples.push({ ticket: b.betId, status: b.betikaStatus ?? 'open', stake, odds: b.odds, possibleWin: b.betikaPossibleWin, tax: b.betikaWht, paid: b.betikaPayout ?? null,
+        rate: b.betikaWht / (b.betikaPossibleWin - stake) });
     } else if (b.betikaStatus === 'won' && b.betikaPayout != null && Number(b.odds) > 1) {
       const gross = stake * Number(b.odds);
-      if (gross > stake) wins.push(1 - (b.betikaPayout - stake) / (gross - stake));
+      if (gross > stake) {
+        wins.push(1 - (b.betikaPayout - stake) / (gross - stake));
+        examples.push({ ticket: b.betId, status: 'won', stake, odds: b.odds, possibleWin: Math.round(gross * 100) / 100, tax: null, paid: b.betikaPayout, rate: wins.at(-1) });
+      }
     }
   }
   const all = [...rates, ...wins].filter((x) => x > -0.05 && x < 0.6).sort((x, y) => x - y);
   if (!all.length) return null;
-  return { n: all.length, rate: all[Math.floor(all.length / 2)], fromWins: wins.length };
+  return { n: all.length, rate: all[Math.floor(all.length / 2)], fromWins: wins.length, won: examples.filter((e) => e.status === 'won').length,
+    examples: examples.slice(-5) };
 }
 
 

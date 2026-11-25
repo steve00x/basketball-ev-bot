@@ -85,10 +85,16 @@ export function taxLines(bets, setting) {
   const t = taxCheck(bets);
   if (!t) return ['TAX CHECK: no Betika history with tax details yet - it fills in after the hourly Betika history check'];
   const pct = (x) => `${Math.round(x * 100)}%`;
-  const out = [`TAX CHECK: Betika withholds about ${pct(t.rate)} of the profit on winning bets (${t.n} bets checked)`];
+  const out = [`TAX CHECK: Betika withholds about ${pct(t.rate)} of the profit on winning bets (${t.n} bets checked, ${t.won} of them won)`,
+    '  bets used (compare with My Bets on Betika - stake, odds, possible win, tax, amount paid):',
+    ...t.examples.map((e) => `    ${String(e.ticket ?? '?').padEnd(8)} ${e.status.padEnd(5)} stake ${e.stake}  odds ${Number(e.odds).toFixed(2)}  possible win ${e.possibleWin}`
+      + `  tax ${e.tax ?? '-'}  paid ${e.paid ?? '-'}  -> ${pct(e.rate)}`)];
+  if (t.won < 3) out.push('  (fewer than 3 won bets so far - check one win on Betika yourself before changing the setting)');
   if (Math.abs(t.rate - setting) > 0.02) {
     out.push(`  !! the bot prices bets with BETIKA_WINNINGS_TAX=${setting} - set BETIKA_WINNINGS_TAX=${Math.round(t.rate * 100) / 100} in .env`,
-      `     otherwise it bets "edges" that are gone after tax (at odds 2.0, ${pct(t.rate)} tax on profit costs ${pct(t.rate / 2)} of EV)`);
+      setting < t.rate
+        ? `     otherwise it bets "edges" that are gone after tax (at odds 2.0, ${pct(t.rate)} tax on profit costs ${pct(t.rate / 2)} of EV)`
+        : '     otherwise it skips good bets: it takes off more tax than Betika does (costs bets, not money)');
   } else out.push(`  matches BETIKA_WINNINGS_TAX=${setting}: OK`);
   return out;
 }
