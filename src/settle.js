@@ -112,10 +112,12 @@ export async function settlePending(api, store, log = console, now = Date.now())
   return { settled, pending: pending.length - settled };
 }
 
+/** Betika's own verdict first (from My Bets), else our score-based grade: won | lost | push | other. */
+export const finalOutcome = (b) => ({ won: 'won', lost: 'lost', void: 'push' })[b.betikaStatus] ?? b.result;
+
 /** Totals for the dashboard: real bets and dry runs separately. */
 export function resultsSummary(bets) {
-  // Betika's own verdict first (from My Bets), else our score-based grade
-  const outcome = (b) => ({ won: 'won', lost: 'lost', void: 'push' })[b.betikaStatus] ?? b.result;
+  const outcome = finalOutcome;
   const sum = (list) => {
     const settled = list.filter((b) => ['won', 'lost', 'push'].includes(outcome(b)));
     const staked = settled.reduce((t, b) => t + (b.stake ?? 0), 0);
@@ -141,7 +143,7 @@ export function resultsSummary(bets) {
  * (stake x EV) over the same bets. Real bets and (first) dry runs separately.
  */
 export function profitCurve(bets) {
-  const outcome = (b) => ({ won: 'won', lost: 'lost', void: 'push' })[b.betikaStatus] ?? b.result;
+  const outcome = finalOutcome;
   const curve = (list) => {
     const settled = list.filter((b) => ['won', 'lost', 'push'].includes(outcome(b)))
       .map((b) => ({ b, t: +new Date(b.grade?.commenceTime ?? b.at) }))

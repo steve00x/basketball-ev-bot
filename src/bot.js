@@ -6,6 +6,7 @@ import { attachBetikaOdds } from './betika/odds.js';
 import { SPORTS, resolveSportKeys, sportGroup } from './sports.js';
 import { OddsAPIError } from './oddsApi.js';
 import { dedupeKey, matchup, scanEvents, selection } from './scanner.js';
+import { recordClosing } from './insights.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SAMPLE_EVENTS = path.join(ROOT, 'sample_data', 'nba_odds.json');
@@ -219,10 +220,13 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   if (s.betikaFixedStake > 0) for (const o of opps) if (o.book === 'betika') o.stake = s.betikaFixedStake; // alerts show the real stake
   const fresh = opps.filter((o) => store.shouldAlert(dedupeKey(o), o.ev, s.realertEvDelta));
   log.info(`found ${opps.length} +EV ${live ? 'LIVE ' : ''}bets (${fresh.length} new)`);
+  // Every priced pick at any EV: the closest call (below) and closing prices for CLV
+  const priced = scanEvents(events, { ...scanSettings, minEv: -1, altTotalsMinEv: -1, teamTotalsMinEv: -1 });
+  if (!live && recordClosing(store.data.bets, priced)) store.save();
   let closest = null;
   if (!opps.length) {
     // Show the closest call so you can see prices really are being compared.
-    const [best] = scanEvents(events, { ...scanSettings, minEv: -1 });
+    const [best] = priced;
     if (best) {
       closest = `${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal}: ${(best.ev * 100).toFixed(1)}% EV`;
       log.info(`closest: ${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal} = `

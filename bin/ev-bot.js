@@ -122,6 +122,11 @@ async function scan() {
       botState.opportunities = summarizeOpps(r.all ?? []);
       botState.closest = r.closest;
       botState.credits = api.requestsRemaining;
+      syncExecutor();
+    };
+    const syncExecutor = () => {
+      botState.pausedUntil = executor?.pausedUntil ? new Date(executor.pausedUntil).toISOString() : null;
+      botState.halted = executor?.halted ? (executor.haltReason ?? 'stake mismatch') : null;
     };
     let papi = null, lastPapi = 0;
     if (s.oddsPapiKey) {

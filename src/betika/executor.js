@@ -78,7 +78,8 @@ export class BetikaExecutor {
     this.store.recordBet({
       key: dedupeKey(opp), at: new Date().toISOString(), matchup: matchup(opp),
       selection: selection(opp), stake, minOdds: bet.minOdds, expectedOdds: opp.decimal,
-      fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}), ...result,
+      fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}),
+      ...(opp.model?.kind ? { model: opp.model.kind } : {}), ...result,
       // what settlement needs: the game and the exact pick
       grade: { sport: opp.sport, eventId: opp.eventId, commenceTime: opp.commenceTime ? new Date(opp.commenceTime).toISOString() : null,
         homeTeam: opp.homeTeam, awayTeam: opp.awayTeam, market: opp.market, outcome: opp.outcome, point: opp.point ?? null,
@@ -107,6 +108,7 @@ export class BetikaExecutor {
 
   halt(reason) {
     this.halted = true;
+    this.haltReason = reason;
     this.log.error?.(`betika: HALTED - ${reason}`);
     this.notify(`Betika bot halted: ${reason}`).catch(() => {});
   }

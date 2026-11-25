@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import os from 'node:os';
 import { dedupeKey, matchup, selection } from './scanner.js';
+import { breakdown, clv, warnings } from './insights.js';
 import { profitCurve, resultsSummary } from './settle.js';
 
 /** Live status the scan loop updates; the dashboard reads it. */
@@ -57,13 +58,15 @@ export function dashboardData(store, s, state = botState, now = new Date()) {
     balanceSource: balance?.source ?? null,
     results: resultsSummary(bets),
     curve: profitCurve(bets),
+    breakdown: breakdown(bets),
+    warnings: warnings({ bets, state, s, balance, now }),
     opportunities: state.opportunities,
     closest: state.closest,
     bets: [...bets].reverse().slice(0, 100).map((b) => ({
       at: b.at, matchup: b.matchup, selection: b.selection, odds: b.odds ?? b.expectedOdds, stake: b.stake, ev: b.ev,
       status: b.status, ticket: b.betId ?? null, live: !!b.live, inPlay: !!b.inPlay, message: b.status === 'placed' ? '' : (b.message ?? ''),
       result: b.result ?? null, profit: b.betikaProfit ?? b.profit ?? null, finalScore: b.finalScore ?? null,
-      betika: b.betikaStatus ?? null, mismatch: !!b.mismatch,
+      betika: b.betikaStatus ?? null, mismatch: !!b.mismatch, clv: clv(b),
     })),
   };
 }
@@ -163,10 +166,18 @@ th{color:var(--mut);font-weight:600;font-size:12px}td.num,th.num{text-align:righ
 .tip .t{color:var(--mut);margin-bottom:4px}.tip .r{display:flex;justify-content:space-between;gap:12px;font-variant-numeric:tabular-nums}
 .tip .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 details.tv{margin-top:8px}details.tv summary{cursor:pointer;color:var(--mut);font-size:12px}
+.alerts{display:grid;gap:8px}.alerts:empty{display:none}
+.alert{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-left-width:4px;border-radius:10px;padding:10px 12px;background:var(--card)}
+.alert.critical{border-left-color:var(--bad);background:var(--badbg)}.alert.warning{border-left-color:var(--warn);background:var(--warnbg)}
+.alert .ic{font-weight:700;line-height:1.3}.alert.critical .ic,.alert.critical .lv{color:var(--bad)}.alert.warning .ic,.alert.warning .lv{color:var(--warn)}
+.alert .lv{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-right:6px}.alert .tt{font-weight:600}.alert .dt{color:var(--mut)}
+.split{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px}.split h3{font-size:13px;margin:4px 0 6px;color:var(--mut);font-weight:600}
+.note{color:var(--mut);font-size:12px;margin-top:8px}
 .chart-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--mut);text-align:center;padding:0 16px}
 </style></head><body>
 <header><h1>EV Bot</h1><div class="pills" id="pills"></div><div class="muted" id="updated"></div></header>
 <main>
+<section class="alerts" id="alerts" aria-live="polite"></section>
 <section class="tiles" id="tiles"></section>
 <section class="card">
   <div class="chart-head">
@@ -176,6 +187,17 @@ details.tv{margin-top:8px}details.tv summary{cursor:pointer;color:var(--mut);fon
   <div class="legend"><span><i class="key" style="background:var(--s1)"></i>Actual profit</span><span><i class="key" style="background:var(--s2)"></i>Expected (stake × EV)</span></div>
   <div class="chart" id="chart"><div class="tip" id="tip" role="status"></div></div>
   <details class="tv"><summary>Show as table</summary><div class="scroll"><table id="cvtable"></table></div></details>
+</section>
+<section class="card">
+  <div class="chart-head">
+    <h2 style="margin:0">Profit by sport and market</h2>
+    <div class="seg" role="group" aria-label="Which bets"><button id="bd-real" aria-pressed="true">Real bets</button><button id="bd-dry" aria-pressed="false">Dry runs</button></div>
+  </div>
+  <div class="split">
+    <div><h3>By sport</h3><div class="scroll"><table id="bysport"></table></div></div>
+    <div><h3>By market</h3><div class="scroll"><table id="bymarket"></table></div></div>
+  </div>
+  <div class="note">CLV (closing line value): your odds against Pinnacle's last fair price before the start. Above 0 means you beat the close, the clearest early sign of a real edge. Profit needs hundreds of bets to settle down; CLV is meaningful after about 50.</div>
 </section>
 <section class="card"><h2>Current +EV opportunities</h2><div class="scroll"><table id="opps"></table></div><div class="muted" id="closest"></div></section>
 <section class="card"><h2>Recent bets</h2><div class="scroll"><table id="bets"></table></div></section>
@@ -212,7 +234,14 @@ async function refresh() {
     el('span', m.betikaLive ? 'LIVE BETTING' : 'DRY RUN', 'pill ' + (m.betikaLive ? 'ok' : 'warn')),
     el('span', m.liveBetting ? (m.liveBetsLive && m.betikaLive ? 'in-play: real' : 'in-play: dry run') : 'in-play: off', 'pill'),
     el('span', 'min EV ' + pct(m.minEv), 'pill'),
-    el('span', 'tax ' + Math.round((m.tax ?? 0) * 100) + '%', 'pill'));
+    el('span', 'tax ' + Math.round((m.tax ?? 0) * 100) + '%', 'pill'),
+    (() => { const w = d.warnings ?? [], c = w.filter((x) => x.level === 'critical').length;
+      return el('span', w.length ? (c ? '⛔ ' : '⚠ ') + w.length + (w.length > 1 ? ' problems' : ' problem') : '✓ all clear', 'pill ' + (c ? 'bad' : w.length ? 'warn' : 'ok')); })());
+  $('alerts').replaceChildren(...(d.warnings ?? []).map((w) => {
+    const box = el('div', null, 'alert ' + w.level), body = el('div');
+    body.append(el('span', w.level === 'critical' ? 'Critical' : 'Warning', 'lv'), el('span', w.title, 'tt'), el('div', w.detail, 'dt'));
+    box.append(el('span', w.level === 'critical' ? '⛔' : '⚠', 'ic'), body); return box;
+  }));
   $('updated').textContent = 'last scan ' + ago(d.lastScan?.at) + (d.nextScan ? ' · next ' + d.nextScan.kind + ' ' + time(d.nextScan.at) : '');
   const t = d.today;
   $('tiles').replaceChildren(
@@ -222,6 +251,7 @@ async function refresh() {
     tile('Betika balance', d.balance != null ? kes(d.balance) : '–',
       d.balance == null ? 'not read yet' : (d.balanceSource === 'read' ? 'read from Betika ' : 'after the last bet, ') + ago(d.balanceAt)),
     tile('Odds API credits', d.credits ?? '–', 'remaining'),
+    clvTile(d.breakdown),
     tile('All time', d.allTime.placed + ' bets', kes(d.allTime.staked) + ' staked · ' + kes(d.allTime.expectedProfit) + ' expected'),
     resultTile('Actual profit (real bets)', d.results.real),
     resultTile('Dry-run profit (paper)', d.results.dryRun));
@@ -231,18 +261,52 @@ async function refresh() {
     { h: 'EV', num: 1, f: (o) => ({ t: pct(o.ev), c: 'pos' }) }, { h: 'Starts', f: (o) => o.inPlay ? 'in play' : time(o.start) }],
     d.opportunities ?? [], 'No +EV prices in the last scan.');
   $('closest').textContent = d.closest ? 'Closest last scan: ' + d.closest : '';
+  bdData = d.breakdown ?? null; drawBreakdown();
   const nextCurve = d.curve ?? { real: [], dryRun: [] };
   if (JSON.stringify(nextCurve) !== JSON.stringify(curveData)) { curveData = nextCurve; if (focusIdx == null) { drawChart(); drawCurveTable(); } }
   table($('bets'), [
     { h: 'Time', f: (b) => time(b.at) }, { h: 'Game', f: (b) => b.matchup }, { h: 'Pick', f: (b) => b.selection + (b.inPlay ? '  · LIVE' : '') },
     { h: 'Odds', num: 1, f: (b) => b.odds ? Number(b.odds).toFixed(2) : '' }, { h: 'Stake', num: 1, f: (b) => b.stake ?? '' },
-    { h: 'EV', num: 1, f: (b) => pct(b.ev) }, { h: 'Status', f: (b) => ({ t: (b.live || b.status === 'dry_run' ? '' : 'dry: ') + String(b.status).replace(/_/g, ' '), c: statusClass(b.status) }) },
+    { h: 'EV', num: 1, f: (b) => pct(b.ev) },
+    { h: 'CLV', num: 1, f: (b) => b.clv == null ? '' : ({ t: pct(b.clv), c: b.clv > 0 ? 'pos' : b.clv < 0 ? 'neg' : '' }) }, { h: 'Status', f: (b) => ({ t: (b.live || b.status === 'dry_run' ? '' : 'dry: ') + String(b.status).replace(/_/g, ' '), c: statusClass(b.status) }) },
     { h: 'Result', f: (b) => b.result ? ({ t: b.result + (b.finalScore ? ' (' + b.finalScore + ')' : ''), c: b.result === 'won' ? 'pos' : b.result === 'lost' ? 'neg' : 'muted' }) : '' },
     { h: 'Betika says', f: (b) => b.betika ? ({ t: b.betika + (b.mismatch ? '  ⚠ check' : ''), c: b.mismatch ? 'neg' : b.betika === 'won' ? 'pos' : 'muted' }) : '' },
     { h: 'Profit', num: 1, f: (b) => b.profit == null ? '' : ({ t: (b.profit > 0 ? '+' : '') + Math.round(b.profit), c: b.profit > 0 ? 'pos' : b.profit < 0 ? 'neg' : '' }) },
     { h: 'Ticket', f: (b) => b.ticket ?? '' }, { h: 'Note', f: (b) => ({ t: b.message ?? '', c: 'muted' }) }],
     d.bets ?? [], 'No bets yet.');
 }
+// ---------------------------------------------------------------- CLV + breakdown
+function clvTile(bd) {
+  const r = bd?.real?.clv, dr = bd?.dryRun?.clv;
+  const c = r?.n ? r : dr?.n ? dr : null, which = r?.n ? 'real bets' : 'dry runs';
+  if (!c) return tile('Beat the close (CLV)', '–', 'appears once games you bet on start');
+  const t = tile('Beat the close (CLV)', pct(c.avg), Math.round(c.beat * 100) + '% of ' + c.n + ' ' + which + " beat Pinnacle's close");
+  t.querySelector('.v').classList.add(c.avg > 0 ? 'pos' : 'neg');
+  return t;
+}
+let bdData = null, bdKey = 'real';
+const signedKes = (n) => ({ t: (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(Math.round(n)).toLocaleString(), c: n > 0 ? 'pos' : n < 0 ? 'neg' : '' });
+const signedPct = (x) => x == null ? '' : ({ t: pct(x), c: x > 0 ? 'pos' : x < 0 ? 'neg' : '' });
+function drawBreakdown() {
+  const b = bdData?.[bdKey] ?? { bySport: [], byMarket: [] };
+  const cols = (h) => [
+    { h, f: (r) => r.name }, { h: 'Bets', num: 1, f: (r) => r.bets },
+    { h: 'W–L', num: 1, f: (r) => r.settled ? r.won + '–' + r.lost : ({ t: 'open', c: 'muted' }) },
+    { h: 'Profit (KES)', num: 1, f: (r) => r.settled ? signedKes(r.profit) : '' },
+    { h: 'ROI', num: 1, f: (r) => signedPct(r.roi) }, { h: 'Avg EV', num: 1, f: (r) => pct(r.avgEv) },
+    { h: 'CLV', num: 1, f: (r) => r.clv == null ? '' : ({ t: pct(r.clv) + ' (' + r.clvN + ')', c: r.clv > 0 ? 'pos' : 'neg' }) }];
+  const none = bdKey === 'real' ? 'No real bets yet.' : 'No dry runs yet.';
+  table($('bysport'), cols('Sport'), b.bySport, none);
+  table($('bymarket'), cols('Market'), b.byMarket, none);
+}
+for (const [id, key] of [['bd-real', 'real'], ['bd-dry', 'dryRun']]) {
+  $(id).addEventListener('click', () => {
+    bdKey = key;
+    $('bd-real').setAttribute('aria-pressed', String(key === 'real')); $('bd-dry').setAttribute('aria-pressed', String(key === 'dryRun'));
+    drawBreakdown();
+  });
+}
+
 // ---------------------------------------------------------------- profit chart
 let curveData = { real: [], dryRun: [] }, curveKey = 'real', focusIdx = null;
 const NS = 'http://www.w3.org/2000/svg';
