@@ -10,60 +10,9 @@
 // model can't see what changes those.
 import { attachBetikaOdds } from './betika/odds.js';
 import { runCycle } from './bot.js';
-import { devig } from './oddsMath.js';
+import { anchorFrom, calibrateDraw, fitGoals, pOver, result } from './goalModel.js';
 
-const MAX_GOALS = 15;
-
-function pmf(lambda) {
-  const out = [Math.exp(-lambda)];
-  for (let k = 1; k <= MAX_GOALS; k++) out.push(out[k - 1] * lambda / k);
-  return out;
-}
-
-/** P(Poisson(lambda) > line) for a half line (2.5 -> 3 or more goals). */
-export function pOver(lambda, line) {
-  const p = pmf(lambda);
-  let under = 0;
-  for (let k = 0; k <= Math.floor(line); k++) under += p[k];
-  return Math.max(0, 1 - under);
-}
-
-/** Home/draw/away from two independent Poisson goal counts, given a current score. */
-export function result(lH, lA, hs = 0, as = 0) {
-  const ph = pmf(lH), pa = pmf(lA);
-  let H = 0, D = 0, A = 0;
-  for (let i = 0; i <= MAX_GOALS; i++) {
-    for (let j = 0; j <= MAX_GOALS; j++) {
-      const p = ph[i] * pa[j], d = hs + i - (as + j);
-      if (d > 0) H += p; else if (d < 0) A += p; else D += p;
-    }
-  }
-  const t = H + D + A;
-  return { H: H / t, D: D / t, A: A / t };
-}
-
-/**
- * Plain Poisson under-prices draws a little. Scale the draw so the model matches Pinnacle's
- * pre-match draw at kick-off (k = Pinnacle draw / model draw), fading as the match runs out
- * (share = part of the match's goals still to come); home/away share the rest as before.
- */
-export function calibrateDraw(r, k, share) {
-  const D = Math.min(0.97, r.D * (1 + (k - 1) * share));
-  const rest = r.H + r.A;
-  return rest > 0 ? { H: r.H / rest * (1 - D), D, A: r.A / rest * (1 - D) } : r;
-}
-
-const bisect = (f, lo, hi, n = 60) => { for (let i = 0; i < n; i++) { const m = (lo + hi) / 2; if (f(m) > 0) hi = m; else lo = m; } return (lo + hi) / 2; };
-
-/**
- * Expected goals per team over the match from Pinnacle's fair prices.
- * The total comes from the totals line (P(Over) at that line), the split from home vs away win chance.
- */
-export function fitGoals({ pH, pA, line, pOver: po }) {
-  const total = bisect((L) => pOver(L, line) - po, 0.05, 10);
-  const share = bisect((x) => { const r = result(total * x, total * (1 - x)); return (r.H - r.A) - (pH - pA); }, 0.02, 0.98);
-  return { lH: total * share, lA: total * (1 - share), total };
-}
+export { anchorFrom, calibrateDraw, fitGoals, pOver, result };
 
 // Stoppage time is not known in advance. Typical spreads in today's game (minutes added -> chance):
 // first half about 3 on average, second half about 7, sometimes 10 or more.
@@ -113,34 +62,6 @@ export function readLive(ref) {
   let [hs, as] = [Number(m[1]), Number(m[2])];
   if (ref.swapped) [hs, as] = [as, hs];
   return { minute, half, hs, as };
-}
-
-/** Pinnacle's pre-match fair 1X2 and main total for one soccer event, or null. */
-export function anchorFrom(event, s) {
-  for (const book of event.bookmakers ?? []) {
-    if (!s.sharpBooks.includes(book.key)) continue;
-    const h2h = book.markets?.find((m) => m.key === 'h2h');
-    const tot = book.markets?.find((m) => m.key === 'totals');
-    if (!h2h || h2h.outcomes?.length !== 3 || !tot) continue;
-    const price = (name) => h2h.outcomes.find((o) => o.name === name)?.price;
-    const prices = [price(event.home_team), price('Draw'), price(event.away_team)];
-    if (prices.some((x) => !(x > 1))) continue;
-    const [pH, pD, pA] = devig(prices, s.devigMethod);
-    // main total: the half line whose fair Over is closest to 50%
-    const byPoint = new Map();
-    for (const o of tot.outcomes ?? []) {
-      if (!byPoint.has(o.point)) byPoint.set(o.point, {});
-      byPoint.get(o.point)[o.name] = o.price;
-    }
-    let best = null;
-    for (const [point, x] of byPoint) {
-      if (!(x.Over > 1 && x.Under > 1) || Number.isInteger(point)) continue;
-      const [po] = devig([x.Over, x.Under], s.devigMethod);
-      if (!best || Math.abs(po - 0.5) < Math.abs(best.pOver - 0.5)) best = { line: point, pOver: po };
-    }
-    if (best) return { pH, pD, pA, ...best };
-  }
-  return null;
 }
 
 /** After a pre-match scan: keep each soccer game's latest Pinnacle anchor (persisted in the store). */

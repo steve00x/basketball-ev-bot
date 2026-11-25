@@ -66,6 +66,10 @@ export function marketLabel(b) {
     totals_h1: b.model === 'alt-total' ? '1st half totals (model)' : '1st half totals', team_totals_h1: '1st half team totals',
     totals_q1: b.model === 'alt-total' ? '1st quarter totals (model)' : '1st quarter totals', team_totals_q1: '1st quarter team totals',
   }[g.market] ?? (g.market ? String(g.market).replace(/_/g, ' ') : 'Other');
+  if (g.market === 'soccer_props') {
+    return ({ btts: 'BTTS', team_total: 'Team goals', res_total: '1X2 & Total', total_btts: 'Total & BTTS', res_btts: '1X2 & BTTS',
+      dc_total: 'DC & Total', dc_btts: 'DC & BTTS', multigoals: 'Multigoals', clean_sheet: 'Clean sheet', win_to_nil: 'Win to nil' })[b.propKind] ?? 'Goals market';
+  }
   if (b.model === 'inplay-model') return (b.late ? 'In-play model 80+ (test) ' : 'In-play model ') + name;
   return (b.inPlay ? 'In-play ' : '') + name + (b.steam ? ' (steam)' : '');
 }

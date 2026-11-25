@@ -2,6 +2,7 @@
 // Real bets (placed) and dry runs are both graded, so dry-run results show how a strategy
 // would have done. Payout uses the winnings tax the bet was priced with.
 import { OddsAPIError } from './oddsApi.js';
+import { ruleHolds } from './goalModel.js';
 
 const SETTLE_AFTER_MS = 2 * 3600_000; // don't look before a game can be over
 
@@ -30,6 +31,8 @@ export function gradePick(g, hs, as) {
     }
     case 'double_chance':
       return g.code ? (g.code.split('').some((c) => sideWins[c]) ? 'won' : 'lost') : null;
+    case 'soccer_props': // goals markets: the rule saved with the bet, on the 90-minute score
+      return g.rule ? (ruleHolds(g.rule, hs, as) ? 'won' : 'lost') : null;
     case 'draw_no_bet':
       if (!g.code) return null;
       return hs === as ? 'push' : sideWins[g.code] ? 'won' : 'lost';

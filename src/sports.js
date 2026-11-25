@@ -33,6 +33,15 @@ export const SPORTS = {
     // Derived from Pinnacle's 1X2 (no extra credits): fair odds come straight from its 3-way prices.
     doubleChance: { subType: 10, title: 'Double Chance' },
     drawNoBet: { subType: 11, title: 'Who Will Win? (If Draw, Money Back)' },
+    // Goals markets priced by our model from Pinnacle's 1X2 + total (src/goalModel.js); all 90 minutes.
+    // Ids and button labels checked on Betika 2026-11-25. side '1'/'2' = Betika's first/second team.
+    props: [
+      { subType: 29, kind: 'btts' }, { subType: 19, kind: 'team_total', side: '1' }, { subType: 20, kind: 'team_total', side: '2' },
+      { subType: 37, kind: 'res_total' }, { subType: 36, kind: 'total_btts' }, { subType: 35, kind: 'res_btts' },
+      { subType: 547, kind: 'dc_total' }, { subType: 546, kind: 'dc_btts' }, { subType: 548, kind: 'multigoals' },
+      { subType: 31, kind: 'clean_sheet', side: '1' }, { subType: 32, kind: 'clean_sheet', side: '2' },
+      { subType: 33, kind: 'win_to_nil', side: '1' }, { subType: 34, kind: 'win_to_nil', side: '2' },
+    ],
   },
   icehockey: {
     // Betika's hockey 1X2 and Total are regulation-only; the NHL moneyline includes OT and

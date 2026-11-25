@@ -98,6 +98,9 @@ export const DEFAULTS = Object.freeze({
   liveModelLateTest: true,     // after LIVE_MODEL_MAX_MINUTE, keep pricing as DRY RUNS only (late-goal test)
   liveModelQuietMinutes: 3,    // no model bets this soon after a goal
   liveModelMaxAnchorHours: 3,  // the pre-match Pinnacle price must be from the last 3 h before kick-off
+  soccerModel: true,           // soccer goals markets (BTTS, team goals, 1X2 & Total, ...) priced by the goals model
+  soccerModelMinEv: 0.05,
+  soccerModelMaxEv: 0.25,      // above this, more likely a misread market than a real edge: skipped
   periodMarkets: true,         // basketball 1st half / 1st quarter totals and team totals (NBA, NCAAB, WNBA)
   periodHoursBefore: 3,        // only for games starting within this many hours
   periodRefreshMinutes: 20,    // each game's Pinnacle period prices at most this often
@@ -203,6 +206,9 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     liveModelLateTest: bool('LIVE_MODEL_LATE_TEST', d.liveModelLateTest),
     liveModelQuietMinutes: num('LIVE_MODEL_QUIET_MINUTES', d.liveModelQuietMinutes),
     liveModelMaxAnchorHours: num('LIVE_MODEL_MAX_ANCHOR_HOURS', d.liveModelMaxAnchorHours),
+    soccerModel: bool('SOCCER_MODEL', d.soccerModel),
+    soccerModelMinEv: num('SOCCER_MODEL_MIN_EV', d.soccerModelMinEv),
+    soccerModelMaxEv: num('SOCCER_MODEL_MAX_EV', d.soccerModelMaxEv),
     periodMarkets: bool('PERIOD_MARKETS', d.periodMarkets),
     periodHoursBefore: num('PERIOD_HOURS_BEFORE', d.periodHoursBefore),
     periodRefreshMinutes: num('PERIOD_REFRESH_MINUTES', d.periodRefreshMinutes),
@@ -242,7 +248,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
 /** Refuse settings that would make the bot bet on everything (e.g. MIN_EV=NaN or negative). */
 export function validateSettings(s) {
   const fail = (m) => { throw new SettingsError(m); };
-  const finite = ['periodHoursBefore', 'periodRefreshMinutes', 'periodGamesPerScan', 'periodDailyCredits', 'liveModelMinEv', 'liveModelMaxMinute', 'liveModelQuietMinutes', 'liveModelMaxAnchorHours', 'steamMinMove', 'steamWindowMinutes', 'steamWatchMinutes', 'steamPollSeconds', 'steamMaxEvents', 'steamDailyCredits', 'liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
+  const finite = ['soccerModelMinEv', 'soccerModelMaxEv', 'periodHoursBefore', 'periodRefreshMinutes', 'periodGamesPerScan', 'periodDailyCredits', 'liveModelMinEv', 'liveModelMaxMinute', 'liveModelQuietMinutes', 'liveModelMaxAnchorHours', 'steamMinMove', 'steamWindowMinutes', 'steamWatchMinutes', 'steamPollSeconds', 'steamMaxEvents', 'steamDailyCredits', 'liveMaxEv', 'liveScoreSettleSeconds', 'settleIntervalMinutes', 'livePollSeconds', 'liveIdleCheckSeconds', 'liveMinEv', 'liveMaxOddsAgeSeconds', 'liveMaxHoursSinceStart', 'oddsPapiWhenFewerThan', 'oddsPapiMinIntervalMinutes', 'oddsPapiRequestsPerScan', 'teamTotalsMinEv', 'teamTotalsMaxDistance', 'altTotalsMinEv', 'altTotalsMaxDistance', 'fastScanMinutes', 'fastPollSeconds', 'minEv', 'minDecimalOdds', 'maxDecimalOdds', 'maxHoursToStart', 'maxLineAgeSeconds', 'bankroll',
     'kellyFraction', 'maxStakePct', 'pollSeconds', 'betikaMinStake', 'betikaMaxStake', 'betikaFixedStake',
     'betikaDailyStakeLimit', 'betikaMaxBetsPerDay'];
   for (const k of finite) if (!Number.isFinite(s[k])) fail(`setting ${k} is not a number: ${s[k]}`);

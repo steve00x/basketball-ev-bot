@@ -264,10 +264,11 @@ export class BetikaClient {
   async outcome(market, label, { click = false } = {}) {
     return this.page.evaluate((M, market, label, click) => {
       const norm = (s) => (s ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
-      const mk = [...document.querySelectorAll(M.market)]
-        .find((m) => norm(m.querySelector(M.marketTitle)?.textContent) === norm(market));
-      if (!mk) return { error: 'market_not_found' };
-      const btn = [...mk.querySelectorAll(M.outcome)]
+      // a market can be split into several boxes with the same title (one per line): look in all of them
+      const boxes = [...document.querySelectorAll(M.market)]
+        .filter((m) => norm(m.querySelector(M.marketTitle)?.textContent) === norm(market));
+      if (!boxes.length) return { error: 'market_not_found' };
+      const btn = boxes.flatMap((mk) => [...mk.querySelectorAll(M.outcome)])
         .find((b) => norm(b.querySelector(M.outcomeLabel)?.textContent) === norm(label));
       if (!btn) return { error: 'outcome_not_found' };
       if (btn.disabled || /disabled|locked|suspended/.test(btn.className)) return { error: 'outcome_suspended' };

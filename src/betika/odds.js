@@ -75,6 +75,14 @@ export function attachBetikaOdds(events, matches, now = new Date(), { live = fal
         description: ours === 'H' ? ev.home_team : ev.away_team, side: ours, betikaTeam }))));
       if (outcomes.length) markets.push({ key: 'team_totals', last_update: ts, outcomes });
     }
+    // Soccer goals markets (priced by the goals model): the rule turned to our home/away view
+    if (m.props?.length) {
+      const map = (x) => (x === 'X' ? 'D' : (x === '1') !== hit.swapped ? 'H' : 'A');
+      const orient = (r) => ({ ...r, ...(r.res ? { res: ['H', 'D', 'A'].filter((c) => r.res.map(map).includes(c)).join('') } : {}),
+        ...(r.team ? { team: { ...r.team, side: map(r.team.side) } } : {}), ...(r.zero ? { zero: map(r.zero) } : {}) });
+      markets.push({ key: 'soccer_props', last_update: ts, outcomes: m.props.map((p) => ({
+        name: p.label, price: p.price, description: p.title, betikaMarket: p.title, betikaLabel: p.label, kind: p.kind, rule: orient(p.rule) })) });
+    }
     // 1st half / 1st quarter: market keys as The Odds API names them (totals_h1, team_totals_q1, ...)
     for (const [pk, per] of Object.entries(m.periods ?? {})) {
       if (per.totals.length) {
@@ -128,6 +136,8 @@ export function betikaPick(opp) {
   if (opp.market === 'totals' && spec.totals) {
     return { market: spec.totals.title, label: `${opp.outcome} ${opp.point}` };
   }
+  // soccer goals markets carry Betika's own market title and button label
+  if (opp.market === 'soccer_props') return opp.betikaMarket && opp.betikaLabel ? { market: opp.betikaMarket, label: opp.betikaLabel } : null;
   // 1st half / 1st quarter, e.g. "1st Half - Total" / "1st Half - Philadelphia Total"
   const per = /^(team_)?totals_(h1|q1)$/.exec(opp.market ?? '');
   const p = per && spec.periods?.find((x) => x.key === per[2]);

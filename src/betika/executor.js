@@ -83,12 +83,13 @@ export class BetikaExecutor {
       fairProb: opp.fairProb, ev: opp.ev, live: bet.live, ...(opp.inPlay ? { inPlay: true } : {}),
       ...(opp.model?.kind ? { model: opp.model.kind } : {}), ...(opp.steam ? { steam: opp.steam.move } : {}),
       ...(opp.model?.kind === 'inplay-model' ? { modelState: { minute: opp.model.minute, score: opp.model.score } } : {}),
-      ...(opp.model?.late ? { late: true } : {}),
+      ...(opp.model?.late ? { late: true } : {}), ...(opp.propKind ? { propKind: opp.propKind } : {}),
       ...(opp.inPlay ? { lineAge: opp.lineAgeSeconds, liveScore: opp.betikaRef?.score ?? null, liveClock: opp.betikaRef?.clock ?? null } : {}), ...result,
       // what settlement needs: the game and the exact pick
       grade: { sport: opp.sport, eventId: opp.eventId, commenceTime: opp.commenceTime ? new Date(opp.commenceTime).toISOString() : null,
         homeTeam: opp.homeTeam, awayTeam: opp.awayTeam, market: opp.market, outcome: opp.outcome, point: opp.point ?? null,
-        description: opp.description ?? null, code: opp.code ?? null, winningsTax: opp.winningsTax ?? 0 },
+        description: opp.description ?? null, code: opp.code ?? null, winningsTax: opp.winningsTax ?? 0,
+        ...(opp.rule ? { rule: opp.rule } : {}) },
     });
 
     const ticket = result.betId ? ` ticket ${result.betId}` : '';

@@ -1,4 +1,5 @@
 // Find +EV bets by comparing soft-book prices to de-vigged sharp prices.
+import { anchorFrom, ruleProb, scoreMatrix } from './goalModel.js';
 import * as om from './oddsMath.js';
 import { sportGroup } from './sports.js';
 
@@ -161,6 +162,7 @@ export function scanEvent(event, s, now = new Date()) {
     }
   }
   if (threeWay) opps.push(...scanDerived(event, s, now, start, threeWay, sharpSet, targetSet));
+  if (s.soccerModel && String(event.sport_key ?? '').startsWith('soccer_') && !s.inPlay) opps.push(...scanSoccerModel(event, s, now, start, targetSet));
   if (s.altTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
     for (const [key, main] of mainTotals) {
       opps.push(...scanAltTotals(event, s, now, start, main, sharpSet, targetSet, exactTotalPoints.get(key) ?? new Set(), key));
@@ -170,6 +172,49 @@ export function scanEvent(event, s, now = new Date()) {
     opps.push(...scanTeamTotals(event, s, now, start, mainTotal, mainSpread, sharpSet, targetSet, sharpTeamTotals));
   }
   return opps;
+}
+
+/**
+ * Soccer goals markets (BTTS, team goals, 1X2 & Total, ...) priced from a score matrix fitted to
+ * Pinnacle's fair 1X2 and main total (src/goalModel.js). No extra API cost. Stricter EV floor,
+ * and an EV ceiling: a huge "edge" on a derived market is more likely a misread market than a gift.
+ */
+function scanSoccerModel(event, s, now, start, targetSet) {
+  const anchor = anchorFrom(event, s);
+  if (!anchor) return [];
+  const sharpAge = anchor.age ? (now - new Date(anchor.age)) / 1000 : 0;
+  if (sharpAge > s.maxLineAgeSeconds) return [];
+  let M = null;
+  const out = [];
+  for (const bm of event.bookmakers ?? []) {
+    if (targetSet.size && !targetSet.has(bm.key)) continue;
+    const mkt = (bm.markets ?? []).find((m) => m.key === 'soccer_props');
+    if (!mkt) continue;
+    const age = ageSeconds(bm, mkt, now);
+    if (age > s.maxLineAgeSeconds) continue;
+    const tax = s.winningsTax?.[bm.key] ?? 0;
+    M ??= scoreMatrix(anchor).M;
+    for (const o of mkt.outcomes ?? []) {
+      if (!o.rule || o.price < s.minDecimalOdds || o.price > s.maxDecimalOdds) continue;
+      const p = ruleProb(M, o.rule);
+      if (!(p > 0.01 && p < 0.99)) continue;
+      const effective = om.afterTax(o.price, tax);
+      const ev = om.expectedValue(p, effective);
+      if (!(ev >= Math.max(s.soccerModelMinEv, s.minEv)) || ev > s.soccerModelMaxEv) continue;
+      out.push({
+        sport: event.sport_key ?? '', eventId: event.id,
+        homeTeam: event.home_team ?? '', awayTeam: event.away_team ?? '', commenceTime: start,
+        market: 'soccer_props', description: o.betikaMarket, outcome: o.betikaLabel, point: null,
+        betikaMarket: o.betikaMarket, betikaLabel: o.betikaLabel, rule: o.rule, propKind: o.kind,
+        book: bm.key, bookTitle: bm.title ?? bm.key,
+        decimal: o.price, effectiveDecimal: effective, winningsTax: tax, fairProb: p, ev,
+        stake: om.stake(p, effective, s.bankroll, s.kellyFraction, s.maxStakePct),
+        sharpBooks: anchor.sharps, lineAgeSeconds: Math.max(age, sharpAge), betikaRef: event.betikaRef ?? null,
+        model: { kind: 'soccer-goals' },
+      });
+    }
+  }
+  return out;
 }
 
 /**

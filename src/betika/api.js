@@ -22,6 +22,40 @@ export const parseEat = (s) => new Date(`${s.replace(' ', 'T')}+03:00`);
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 1 ? n : null; };
 
+/**
+ * A Betika goals-market button as a rule on the final score, from Betika's side ('1' = first team):
+ * e.g. "X & OVER 1.5" -> { res: ['X'], total: { line: 1.5, over: true } }. Null if not understood.
+ */
+export function propRule(kind, display, side) {
+  const d = String(display ?? '').replace(/\s+/g, ' ').trim().toUpperCase();
+  const other = side === '1' ? '2' : '1';
+  const tot = (t) => { const m = /^(OVER|UNDER) (\d+\.5)$/.exec(t); return m ? { line: Number(m[2]), over: m[1] === 'OVER' } : null; };
+  const res = (t) => ({ 1: ['1'], X: ['X'], 2: ['2'], '1/X': ['1', 'X'], 'X/2': ['X', '2'], '1/2': ['1', '2'] })[t] ?? null;
+  const yn = (t) => (t === 'YES' ? true : t === 'NO' ? false : null);
+  const parts = d.split(' & ');
+  switch (kind) {
+    case 'btts': return yn(d) == null ? null : { btts: yn(d) };
+    case 'team_total': { const t = tot(d); return t ? { team: { side, ...t } } : null; }
+    case 'res_total': case 'dc_total': {
+      const r = res(parts[0]), t = tot(parts[1] ?? '');
+      return r && t && (kind === 'dc_total') === (r.length === 2) ? { res: r, total: t } : null;
+    }
+    case 'total_btts': { const t = tot(parts[0]), b = yn(parts[1]); return t && b != null ? { total: t, btts: b } : null; }
+    case 'res_btts': case 'dc_btts': {
+      const r = res(parts[0]), b = yn(parts[1]);
+      return r && b != null && (kind === 'dc_btts') === (r.length === 2) ? { res: r, btts: b } : null;
+    }
+    case 'multigoals': {
+      if (d === 'NO GOAL') return { range: [0, 0] };
+      const m = /^(\d+)-(\d+)$/.exec(d) ?? /^(\d+)\+$/.exec(d);
+      return m ? { range: [Number(m[1]), m[2] != null ? Number(m[2]) : 99] } : null;
+    }
+    case 'clean_sheet': return yn(d) == null ? null : { zero: other, ...(yn(d) ? {} : { neg: true }) };
+    case 'win_to_nil': return yn(d) == null ? null : { res: [side], zero: other, ...(yn(d) ? {} : { neg: true }) };
+    default: return null;
+  }
+}
+
 /** One Over/Under ladder (market `st`) of a listing row: [{ point, over, under }], sorted. */
 function ladderOf(m, st) {
   const mk = (m.odds ?? []).find((o) => Number(o.sub_type_id) === st);
@@ -74,6 +108,16 @@ export function parseListings(winnerJson, totalJson, spec = SPORTS.basketball, s
       const p = (d) => num(dc.odds.find((o) => String(o.display).trim().toUpperCase() === d)?.odd_value);
       const v = { '1X': p('1/X'), 'X2': p('X/2'), '12': p('1/2') };
       if (v['1X'] && v.X2 && v['12']) rec.doubleChance = v;
+    }
+    // goals markets for the soccer model: every button with its rule
+    for (const pr of spec.props ?? []) {
+      for (const mk of (m.odds ?? []).filter((o) => Number(o.sub_type_id) === pr.subType)) {
+        for (const o of mk.odds ?? []) {
+          const price = num(o.odd_value);
+          const rule = price && propRule(pr.kind, o.display, pr.side);
+          if (rule) (rec.props ??= []).push({ kind: pr.kind, title: mk.name, label: String(o.display).trim(), price, rule });
+        }
+      }
     }
     const dnb = spec.drawNoBet && extra(spec.drawNoBet.subType);
     if (dnb) {
@@ -160,7 +204,7 @@ export class BetikaAPI {
     if (!spec) throw new Error(`unknown sport "${sport}"`);
     const opts = { sportId: spec.betikaSportId };
     const [winner, total] = await Promise.all([
-      this.listing([spec.h2h.subType, spec.doubleChance?.subType, spec.drawNoBet?.subType].filter(Boolean).join(','), opts),
+      this.listing([spec.h2h.subType, spec.doubleChance?.subType, spec.drawNoBet?.subType, ...(spec.props ?? []).map((p) => p.subType)].filter(Boolean).join(','), opts),
       spec.totals ? this.listing([spec.totals.subType, spec.teamTotals?.homeSubType, spec.teamTotals?.awaySubType,
         ...(spec.periods ?? []).flatMap((p) => [p.totals, p.teamHome, p.teamAway])].filter(Boolean).join(','), opts) : Promise.resolve(null),
     ]);
