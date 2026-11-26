@@ -1,0 +1,11 @@
+node_modules
+.git
+.env
+data
+.betika-session
+discover
+ev-bot-store.json*
+deriv-trades.jsonl
+deriv-status.json
+oddspapi-cache.json
+logs

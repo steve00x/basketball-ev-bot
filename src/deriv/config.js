@@ -28,6 +28,8 @@ export const DERIV_DEFAULTS = Object.freeze({
   maxConsecutiveLosses: 3,
   cooldownSeconds: 300,
   journalPath: 'deriv-trades.jsonl',
+  statusPath: 'deriv-status.json',
+  stallSeconds: 120, // no tick for this long -> reconnect
 });
 
 export function derivSettingsFromEnv() {
@@ -54,6 +56,8 @@ export function derivSettingsFromEnv() {
     maxConsecutiveLosses: num('DERIV_MAX_CONSECUTIVE_LOSSES', d.maxConsecutiveLosses),
     cooldownSeconds: num('DERIV_COOLDOWN_SECONDS', d.cooldownSeconds),
     journalPath: str('DERIV_JOURNAL', d.journalPath),
+    statusPath: str('DERIV_STATUS_FILE', d.statusPath),
+    stallSeconds: num('DERIV_STALL_SECONDS', d.stallSeconds),
   });
 }
 
@@ -70,6 +74,7 @@ export function validateDerivSettings(s) {
   if (!(s.maxDailyTrades >= 1)) fail('DERIV_MAX_DAILY_TRADES must be at least 1');
   if (!(s.minPayoutRatio > 1)) fail('DERIV_MIN_PAYOUT_RATIO must be above 1 (payout / stake, e.g. 1.8)');
   if (s.emaFast >= s.emaSlow) fail('DERIV_EMA_FAST must be smaller than DERIV_EMA_SLOW');
+  if (!(s.stallSeconds >= 30)) fail('DERIV_STALL_SECONDS must be at least 30');
   if (s.live && !s.token) fail('DERIV_LIVE=true needs DERIV_API_TOKEN (create one with Read + Trade scopes)');
   return s;
 }

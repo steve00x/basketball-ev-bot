@@ -70,6 +70,26 @@ export class RiskManager {
     }
   }
 
+  /**
+   * Rebuild today's state from the trade journal after a restart, so a crash or reboot
+   * never resets the daily loss limit, the trade count or a losing-streak pause.
+   * records: journal rows ({ finished, profit }) for the mode being traded.
+   */
+  restore(records) {
+    this.#rollDay();
+    const realNow = this.now;
+    const today = records
+      .filter((r) => typeof r.finished === 'string' && r.finished.slice(0, 10) === this.day && Number.isFinite(r.profit))
+      .sort((a, b) => a.finished.localeCompare(b.finished));
+    for (const r of today) {
+      const t = Date.parse(r.finished);
+      this.now = () => t; // a pause started by these trades runs from when they finished
+      this.closed(r.profit);
+    }
+    this.now = realNow;
+    return today.length;
+  }
+
   summary() {
     return { day: this.day, trades: this.trades, wins: this.wins, pnl: Math.round(this.pnl * 100) / 100 };
   }

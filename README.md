@@ -171,3 +171,62 @@ expected value. These limits control *how much* you can lose. They do not create
 WebSockets and new app ids from developers.deriv.com). This bot uses the long-standing v3 protocol, which the
 official `@deriv/deriv-api` package also uses. If Deriv retires v3, only `src/deriv/client.js` (connection and
 login) should need to change.
+
+## Run it 24/7
+
+Both bots can run unattended. They restart after a crash, a lost connection or a reboot.
+
+**What makes this safe to leave running:**
+- **Deriv limits survive restarts.** On start-up the Deriv bot rebuilds today's P&L, trade count and
+  losing-streak pause from `deriv-trades.jsonl`, so a crash never resets the daily loss limit.
+  Betika's daily limits already come from its bet log.
+- **Clean stops.** On a stop (Ctrl+C, or SIGTERM from PM2 / Docker / systemd), Deriv waits up to 30 s for
+  an open contract to finish, and Betika finishes its scan cycle instead of stopping mid-bet.
+- **Hung connections.** If no Deriv tick arrives for `DERIV_STALL_SECONDS` (120), the bot reconnects.
+  An unexpected error makes it exit, so the supervisor starts a fresh copy.
+- **Health check.** `node bin/deriv-bot.js status` prints the mode, the last tick and today's P&L, and
+  exits with 1 when the bot is stuck or stopped.
+
+Choose **one** of the two options below.
+
+### Option A: PM2 (a spare PC, a laptop that stays on, or a server)
+
+```bash
+npm install                                   # once
+npm install -g pm2
+pm2 start ecosystem.config.cjs --only deriv   # Deriv only; leave out --only to run Betika too
+pm2 save
+pm2 startup                                   # prints one command: run it so the bots start at boot
+pm2 install pm2-logrotate                     # keeps logs/ from filling the disk
+```
+
+Day to day: `pm2 status`, `pm2 logs deriv`, `pm2 restart deriv` (after changing `.env`), `pm2 stop all`.
+On Windows, `pm2 startup` doesn't work; use `npm install -g pm2-windows-startup` and then `pm2-startup install`.
+
+### Option B: Docker (a VPS, e.g. a $5/month Linux server)
+
+```bash
+git clone <this repo> && cd basketball-ev-bot
+cp .env.example .env && nano .env      # your settings
+docker compose up -d --build deriv     # Deriv only; `docker compose up -d --build` for both
+docker compose ps                      # "healthy" = Deriv ticks are arriving
+docker compose logs -f deriv
+```
+
+Everything the bots write goes to `./data`: the bet log, the Deriv journal and the Betika login. Back up
+that folder. After changing `.env`, run `docker compose up -d` again. `restart: unless-stopped` starts the
+bots again after a crash or a reboot.
+
+**Betika on a server needs three extra things:**
+1. **Log in once on your own computer** (`node bin/ev-bot.js login`), then copy the `.betika-session`
+   folder to the server as `data/.betika-session`. A server has no screen for the login or OTP. If Betika
+   logs you out later, repeat this step.
+2. **A Kenyan connection.** Betika may block servers outside Kenya. Use a VPS in Kenya, or set
+   `BETIKA_BROWSER_PROXY`.
+3. **The dashboard:** set `DASHBOARD_KEY` (16+ characters). It is published only on the server itself
+   (`127.0.0.1:3000`). Open it from your computer with `ssh -L 3000:localhost:3000 you@server` and go to
+   `http://localhost:3000/?key=...`.
+
+**Before leaving it alone:** run in paper / dry-run mode for a few days first, then on a Deriv **demo**
+account. Check `deriv-bot report` and the logs every day. An unattended bot can lose money for hours
+before you notice, which is why the daily limits exist. Keep them small.

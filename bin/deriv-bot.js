@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// CLI: deriv-bot <run|backtest|balance|symbols|report>
+// CLI: deriv-bot <run|backtest|balance|symbols|report|status>
+import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { SettingsError, loadDotenv } from '../src/config.js';
 import { DerivClient } from '../src/deriv/client.js';
 import { derivSettingsFromEnv, strategyParams } from '../src/deriv/config.js';
 import { backtest } from '../src/deriv/strategy.js';
-import { DerivTrader, summarizeJournal } from '../src/deriv/trader.js';
+import { RiskManager } from '../src/deriv/risk.js';
+import { DerivTrader, readJournal, summarizeJournal } from '../src/deriv/trader.js';
 
 const HELP = `Usage: deriv-bot <command> [options]
 
@@ -15,6 +17,7 @@ Commands:
   balance    print the account balance (needs DERIV_API_TOKEN)
   symbols    list markets that are open now
   report     win rate and profit from the trade journal
+  status     is the running bot healthy? (exit code 1 if not; for health checks)
 
 Options:
   --count N  ticks for backtest (max 5000)
@@ -43,6 +46,15 @@ async function main() {
       console.log(`${mode}: ${g.trades} trades, won ${(g.winRate * 100).toFixed(1)}% (break-even ${(g.breakEvenWinRate * 100).toFixed(1)}%), profit ${g.profit}, ROI ${(g.roi * 100).toFixed(2)}%`);
     }
     return;
+  }
+
+  if (cmd === 'status') {
+    let st;
+    try { st = JSON.parse(fs.readFileSync(s.statusPath, 'utf8')); } catch { console.log(`no ${s.statusPath}: the bot is not running here`); return 1; }
+    const age = Math.round((Date.now() - Date.parse(st.updated)) / 1000);
+    const tickAge = st.lastTick ? Math.round((Date.now() - Date.parse(st.lastTick)) / 1000) : null;
+    console.log(`${st.mode} ${st.symbol}: status written ${age}s ago, last tick ${tickAge ?? '-'}s ago, today ${st.today.wins}/${st.today.trades} won, P&L ${st.today.pnl}${st.blocked ? ` (paused: ${st.blocked})` : ''}`);
+    return age <= 120 && tickAge !== null && tickAge <= s.stallSeconds * 2 ? 0 : 1;
   }
 
   if (cmd === 'symbols') {
@@ -76,6 +88,14 @@ async function main() {
 
   if (cmd !== 'run') throw new SettingsError(`unknown command ${cmd}\n\n${HELP}`);
 
+  // Today's limits survive restarts: rebuild them from the journal
+  const risk = new RiskManager(s);
+  const restored = risk.restore(readJournal(s.journalPath).filter((r) => r.mode === (s.live ? 'live' : 'paper')));
+  if (restored) {
+    const d = risk.summary();
+    log.info(`restored today from ${s.journalPath}: ${d.wins}/${d.trades} won, P&L ${d.pnl}${risk.blocked() ? ` - ${risk.blocked()}` : ''}`);
+  }
+
   let trader = null;
   let stopping = false;
   const retry = () => start().catch((e) => {
@@ -84,8 +104,8 @@ async function main() {
   });
   const start = async () => {
     const prev = trader;
-    if (prev?.paper) prev.risk.open = false; // a paper trade cut off by the disconnect is dropped
-    trader = new DerivTrader({ client: client(), settings: s, log, risk: prev?.risk });
+    if (prev?.paper) risk.open = false; // a paper trade cut off by the disconnect is dropped
+    trader = new DerivTrader({ client: client(), settings: s, log, risk });
     trader.client.onClose = () => {
       if (stopping) return;
       log.warn('connection lost, reconnecting in 5s');
@@ -104,17 +124,48 @@ async function main() {
       await trader.watchContract(prev.contract.contractId);
     }
   };
-  process.on('SIGINT', async () => {
+
+  // Watchdog: a socket can hang without closing. No tick for DERIV_STALL_SECONDS -> reconnect.
+  // It also writes DERIV_STATUS_FILE, which `deriv-bot status` reads.
+  const watchdog = setInterval(() => {
+    if (!trader || stopping) return;
+    const quiet = (Date.now() - (trader.lastTickAt ?? Date.now())) / 1000;
+    if (trader.lastTickAt && quiet > s.stallSeconds && trader.client.ws?.readyState === 1) {
+      log.warn(`no tick for ${Math.round(quiet)}s, reconnecting`);
+      trader.client.ws.close(); // fires onClose -> reconnect
+    }
+    try {
+      fs.writeFileSync(s.statusPath, JSON.stringify({
+        updated: new Date().toISOString(), pid: process.pid, mode: trader.mode, symbol: s.symbol,
+        lastTick: trader.lastTickAt ? new Date(trader.lastTickAt).toISOString() : null,
+        today: risk.summary(), blocked: risk.blocked() === 'a contract is still open' ? null : risk.blocked(),
+      }));
+    } catch (e) { log.warn(`status file: ${e.message}`); }
+  }, 15000);
+
+  // Ctrl+C, and SIGTERM from PM2 / Docker / systemd: let an open live contract finish first
+  const shutdown = async (sig) => {
+    if (stopping) return;
     stopping = true;
-    const d = trader?.risk.summary();
-    log.info(`stopping. today: ${d?.wins ?? 0}/${d?.trades ?? 0} won, P&L ${d?.pnl ?? 0}`);
+    clearInterval(watchdog);
+    for (let i = 0; i < 30 && trader?.contract; i++) {
+      if (i === 0) log.info(`${sig}: waiting for contract #${trader.contract.contractId} to finish`);
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    const d = risk.summary();
+    log.info(`stopping. today: ${d.wins}/${d.trades} won, P&L ${d.pnl}`);
     await trader?.stop().catch(() => {});
     process.exit(0);
-  });
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  // A bug must not leave a half-working bot: exit, and the supervisor starts a fresh one
+  process.on('unhandledRejection', (e) => { log.error(`unexpected: ${e?.stack ?? e}`); process.exit(1); });
+  process.on('uncaughtException', (e) => { log.error(`unexpected: ${e?.stack ?? e}`); process.exit(1); });
   await start();
 }
 
-main().catch((e) => {
+main().then((code) => { if (typeof code === 'number') process.exitCode = code; }).catch((e) => {
   log.error(e instanceof SettingsError || !process.env.DEBUG ? e.message : e.stack);
   process.exit(1);
 });

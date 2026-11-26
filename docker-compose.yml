@@ -1,0 +1,40 @@
+# Runs the bots around the clock and restarts them after a crash or a reboot.
+#   docker compose up -d deriv           # Deriv only
+#   docker compose up -d                 # Deriv and Betika
+#   docker compose logs -f               # watch
+#   docker compose ps                    # "healthy" = Deriv ticks are arriving
+# Settings come from .env. Files the bots write are kept in ./data.
+
+x-bot: &bot
+  build: .
+  image: trading-bots
+  env_file: .env
+  volumes:
+    - ./data:/app/data
+  restart: unless-stopped
+  init: true # reaps Chromium child processes and passes signals on
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
+services:
+  deriv:
+    <<: *bot
+    command: ["node", "bin/deriv-bot.js", "run"]
+    stop_grace_period: 45s # lets an open contract finish
+    healthcheck:
+      test: ["CMD", "node", "bin/deriv-bot.js", "status"]
+      interval: 60s
+      timeout: 15s
+      start_period: 60s
+      retries: 3
+
+  betika:
+    <<: *bot
+    command: ["node", "bin/ev-bot.js", "scan"]
+    stop_grace_period: 120s # finishes the current scan cycle, never stops mid-bet
+    shm_size: 512m # Chromium needs more than Docker's 64 MB default
+    environment:
+      DASHBOARD_HOST: 0.0.0.0 # inside the container; only works when DASHBOARD_KEY is set (16+ characters)
+    ports:
+      - "127.0.0.1:3000:3000" # dashboard on the server itself; see README for opening it from a phone

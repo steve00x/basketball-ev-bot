@@ -46,6 +46,7 @@ export class DerivTrader {
     }
     const { history } = await this.client.request({ ticks_history: this.s.symbol, end: 'latest', count: HISTORY_TICKS, style: 'ticks' });
     this.prices = (history?.prices ?? []).map(Number);
+    this.lastTickAt = this.now();
     this.tickStream = await this.client.subscribe({ ticks: this.s.symbol }, (m) => m.tick && this.onTick(Number(m.tick.quote)));
     this.log.info(`${this.mode}: ${this.s.symbol}, ${this.s.strategy}, stake ${this.s.stake} ${this.s.currency}, Rise/Fall over ${this.s.durationTicks} ticks`);
   }
@@ -56,6 +57,7 @@ export class DerivTrader {
   }
 
   onTick(price) {
+    this.lastTickAt = this.now();
     this.tickCount++;
     this.prices.push(price);
     if (this.prices.length > MAX_PRICES) this.prices.splice(0, this.prices.length - MAX_PRICES);
@@ -156,10 +158,21 @@ export class DerivTrader {
   }
 }
 
+/** All rows of the trade journal (a half-written last line after a crash is skipped). */
+export function readJournal(path) {
+  if (!path || !fs.existsSync(path)) return [];
+  const rows = [];
+  for (const line of fs.readFileSync(path, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    try { rows.push(JSON.parse(line)); } catch { /* torn write */ }
+  }
+  return rows;
+}
+
 /** Read the trade journal and summarise it (win rate vs the rate needed to break even). */
 export function summarizeJournal(path) {
-  if (!fs.existsSync(path)) return null;
-  const rows = fs.readFileSync(path, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const rows = readJournal(path);
+  if (!rows.length) return null;
   const by = {};
   for (const r of rows) {
     const k = r.mode;

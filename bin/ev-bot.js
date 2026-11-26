@@ -78,7 +78,10 @@ const makeClient = (overrides = {}) => new BetikaClient({
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let stopping = false;
-process.on('SIGINT', () => { if (stopping) process.exit(130); stopping = true; log.info('stopping after this cycle...'); });
+// Ctrl+C, or SIGTERM from PM2 / Docker / systemd: finish the current cycle (never stop mid-bet), then exit
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => { if (stopping) process.exit(130); stopping = true; log.info(`${sig}: stopping after this cycle...`); });
+}
 
 async function scan() {
   const notifier = new Notifier(s);

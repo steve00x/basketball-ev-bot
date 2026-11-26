@@ -188,3 +188,25 @@ test('live on a real-money account is refused unless DERIV_ALLOW_REAL=true', asy
   const trader = new DerivTrader({ client: new DerivClient({ appId: '1', socketFactory: d.factory, pingMs: 0, log: quiet }), settings: s, log: quiet });
   await assert.rejects(trader.start(), /REAL/);
 });
+
+test('risk: a restart rebuilds today from the journal (loss limit, count, losing-streak pause)', () => {
+  const t = Date.parse('2026-11-25T12:00:00Z');
+  const r = new RiskManager({ stake: 2, maxDailyLoss: 5, maxDailyTrades: 10, maxConsecutiveLosses: 2, cooldownSeconds: 600, minPayoutRatio: 1.8 }, () => t);
+  const n = r.restore([
+    { finished: '2026-11-24T23:59:00Z', profit: -2 }, // yesterday: ignored
+    { finished: '2026-11-25T11:57:00Z', profit: -2 },
+    { finished: '2026-11-25T11:58:00Z', profit: -2 },
+    { finished: 'garbage', profit: 5 },
+  ]);
+  assert.equal(n, 2);
+  assert.deepEqual(r.summary(), { day: '2026-11-25', trades: 2, wins: 0, pnl: -4 });
+  assert.match(r.blocked(), /cooling down.*480s left/); // pause from 11:58 for 600s
+  assert.equal(r.now(), t);
+});
+
+test('journal: a half-written last line after a crash is skipped', () => {
+  const jp = journal();
+  fs.writeFileSync(jp, '{"mode":"paper","profit":1,"stake":1,"payout":1.95}\n{"mode":"pap');
+  const sum = summarizeJournal(jp);
+  assert.equal(sum.paper.trades, 1);
+});

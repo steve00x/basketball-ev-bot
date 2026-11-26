@@ -5,3 +5,6 @@ ev-bot-store.json*
 discover/
 oddspapi-cache.json
 deriv-trades.jsonl
+logs/
+data/
+deriv-status.json
