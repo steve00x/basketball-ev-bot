@@ -154,7 +154,13 @@ async function scan() {
       process.on('exit', rel);
       const st = new Store(as.storePath, { log: tag });
       const cl = makeClient({ sessionDir: as.betikaSessionDir, phone: as.betikaPhone, password: as.betikaPassword, log: tag });
-      if (as.betikaLive) { await cl.ensureLoggedIn(); await refreshBalance(cl, st, tag); }
+      // one account failing to open Betika must not stop the others: it logs in again when it next bets
+      if (as.betikaLive) {
+        try { await cl.ensureLoggedIn(); await refreshBalance(cl, st, tag); } catch (e) {
+          tag.warn(`could not open Betika at start-up (${e.message.split('\n')[0]}) - the bot carries on; this account retries when it next bets`
+            + ` (if it keeps failing: node bin/ev-bot.js login --account ${name})`);
+        }
+      }
       const ex = new BetikaExecutor(as, cl, st, { log: tag, notify: (t) => notifier.sendText(`[${name}] ${t}`) });
       accounts.push({ name, s: as, client: cl, store: st, executor: ex, log: tag });
       tag.info(`betika: ${as.betikaLive ? 'LIVE - real bets' : 'DRY RUN'} | stake ${as.betikaFixedStake || 'Kelly'} | max ${as.betikaMaxBetsPerDay} bets/day`);
