@@ -58,11 +58,13 @@ export class DemoBetikaPlacer {
 
 /** Books to request from The Odds API, and books the scanner may flag. */
 export function bookPlan(s) {
-  if (s.betikaEnabled && !s.targetBooks.length) {
-    // Betika prices come from the browser, so only pay The Odds API for the sharp books.
-    return { apiBooks: s.sharpBooks, scanTargets: ['betika'] };
+  // Sportsbooks whose odds the bot reads itself (Betika, and others added later): no Odds API cost.
+  const own = [...(s.betikaEnabled ? ['betika'] : []), ...(s.ownFeedBooks ?? [])];
+  if (own.length && !s.targetBooks.length) {
+    // their prices come from their own feeds, so only pay The Odds API for the sharp books.
+    return { apiBooks: s.sharpBooks, scanTargets: own };
   }
-  const targets = s.betikaEnabled ? [...s.targetBooks, 'betika'] : s.targetBooks;
+  const targets = [...s.targetBooks, ...own];
   return { apiBooks: s.targetBooks.length ? [...s.sharpBooks, ...s.targetBooks] : null, scanTargets: targets };
 }
 
@@ -206,7 +208,7 @@ export const liveSettings = (s) => ({ ...s, inPlay: true, minEv: Math.max(s.live
  * and `confirm(opp, event, scanSettings)` re-prices a pick with a fresh Pinnacle price before betting.
  */
 export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false, guard = null, confirm = null,
-  steam = null, decorate = null, now = new Date(), enrich = null }) {
+  steam = null, decorate = null, now = new Date(), enrich = null, executors = null }) {
   if (live) s = liveSettings(s);
   if (betika) {
     try {
@@ -253,29 +255,36 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   for (const o of fresh) store.recordAlert(dedupeKey(o), o.ev);
 
   const results = [];
-  if (executor) {
+  // One bet queue per sportsbook, all running at the same time: executor (Betika) plus any in
+  // `executors` ({ bookKey: executor }). Within a book, picks go one after another (one browser).
+  const books = { ...(executor ? { betika: executor } : {}), ...(executors ?? {}) };
+  if (Object.keys(books).length) {
     // Every current opportunity not yet bet gets a try, not only new alerts: one skipped earlier
     // (stake too small, price moved, error) can qualify now. Already-placed bets are skipped.
     const byId = new Map(events.map((e) => [e.id, e]));
-    for (let o of opps) {
-      if (o.book !== 'betika') continue;
-      if (o.inPlay) {
-        // in play: only when Pinnacle has priced the current score, then once more with a fresh price
-        const why = guard?.check(o, +now);
-        if (why) { results.push({ opp: o, result: { status: 'skipped', reason: why } }); continue; }
-        if (confirm && !store.hasBet(dedupeKey(o)) && !executor.check(o, s.betikaFixedStake || o.stake)) {
-          const c = await confirm(o, byId.get(o.eventId), scanSettings);
-          const why2 = c.opp ? guard?.check(c.opp, +now) : c.reason;
-          if (why2) {
-            log.info(`live: skip ${selection(o)} (${why2.replace(/_/g, ' ')}${c.error ? `: ${c.error}` : ''})`);
-            results.push({ opp: o, result: { status: 'skipped', reason: why2 } });
-            continue;
+    const queue = async (book, ex) => {
+      for (let o of opps) {
+        if (o.book !== book) continue;
+        if (o.inPlay) {
+          // in play: only when Pinnacle has priced the current score, then once more with a fresh price
+          const why = guard?.check(o, +now);
+          if (why) { results.push({ opp: o, result: { status: 'skipped', reason: why } }); continue; }
+          if (confirm && !ex.store.hasBet(dedupeKey(o)) && !ex.check(o, s.betikaFixedStake || o.stake)) {
+            const c = await confirm(o, byId.get(o.eventId), scanSettings);
+            const why2 = c.opp ? guard?.check(c.opp, +now) : c.reason;
+            if (why2) {
+              log.info(`live: skip ${selection(o)} (${why2.replace(/_/g, ' ')}${c.error ? `: ${c.error}` : ''})`);
+              results.push({ opp: o, result: { status: 'skipped', reason: why2 } });
+              continue;
+            }
+            o = c.opp;
           }
-          o = c.opp;
         }
+        results.push({ opp: o, result: await ex.execute(o) });
       }
-      results.push({ opp: o, result: await executor.execute(o) });
-    }
+    };
+    const done = await Promise.allSettled(Object.entries(books).map(([book, ex]) => queue(book, ex)));
+    done.forEach((d, i) => { if (d.status === 'rejected') log.error(`${Object.keys(books)[i]}: ${d.reason?.stack ?? d.reason}`); });
     if (results.length) {
       const count = {};
       for (const { result: r } of results) { const k = r.status === 'skipped' ? r.reason : r.status; count[k] = (count[k] ?? 0) + 1; }

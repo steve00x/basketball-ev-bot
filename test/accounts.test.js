@@ -71,3 +71,23 @@ test('multi-account: accounts place at the same time, not one after another', as
     betikaRef: { parentMatchId: 'z', home: 'A', away: 'B', swapped: false } });
   assert.deepEqual(log.slice(0, 2).sort(), ['dad start', 'main start']);   // both started before either finished
 });
+
+test('several sportsbooks: each gets its own picks, and all books place at the same time', async () => {
+  const { runCycle } = await import('../src/bot.js');
+  const now = new Date(Date.now() + 0);
+  const start = new Date(Date.now() + 3 * 3600_000).toISOString();
+  const iso = now.toISOString();
+  const book = (key, price, other = 1.5) => ({ key, title: key, last_update: iso, markets: [{ key: 'h2h', last_update: iso, outcomes: [{ name: 'A', price }, { name: 'B', price: other }] }] });
+  const events = [{ id: 'e1', sport_key: 'basketball_nba', home_team: 'A', away_team: 'B', commence_time: start,
+    betikaRef: { parentMatchId: '1', home: 'A', away: 'B', swapped: false },
+    bookmakers: [book('pinnacle', 1.95, 1.95), book('betika', 2.3), book('odibets', 2.25)] }];  // fair 50%: +15% / +12.5%
+  const log = [];
+  const fake = (name) => ({ store: new Store(':memory:'), check: () => null,
+    execute: async (o) => { log.push(`${name} start ${o.book}`); await new Promise((r) => setTimeout(r, 40)); log.push(`${name} end`); return { status: 'dry_run' }; } });
+  const s = makeSettings({ betikaEnabled: true, ownFeedBooks: ['odibets'], minEv: 0.02, winningsTax: {}, maxLineAgeSeconds: 300, altTotals: false, teamTotals: false, soccerModel: false });
+  const store = new Store(':memory:');
+  await runCycle({ events, s, store, notifier: { sendOpportunities: async () => {} }, betika: null, executor: fake('betika'),
+    executors: { odibets: fake('odibets') }, log: quiet, now });
+  assert.deepEqual(log.slice(0, 2).sort(), ['betika start betika', 'odibets start odibets']); // both before either finished
+  assert.equal(log.length, 4);
+});
