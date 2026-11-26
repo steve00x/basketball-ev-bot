@@ -98,7 +98,8 @@ if (opt.account && opt.account !== 'main') {
 
 const makeClient = (overrides = {}) => new BetikaClient({
   headless: s.betikaHeadless, sessionDir: s.betikaSessionDir, chromePath: s.chromePath, proxy: s.betikaBrowserProxy,
-  selectorsFile: s.betikaSelectors, phone: s.betikaPhone, password: s.betikaPassword, log, ...overrides,
+  selectorsFile: s.betikaSelectors, phone: s.betikaPhone, password: s.betikaPassword, log,
+  pageTimeoutMs: (s.betikaPageTimeoutSeconds ?? 30) * 1000, ...overrides,
 });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

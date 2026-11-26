@@ -184,6 +184,7 @@ export const DEFAULTS = Object.freeze({
   betikaSessionDir: '.betika-session',
   chromePath: '',
   betikaBrowserProxy: '', // only needed behind an HTTP proxy
+  betikaPageTimeoutSeconds: 30, // how long to wait for a Betika page (raise on a slow connection)
 });
 
 export function settingsFromEnv(dotenv = '.env', overrides = {}) {
@@ -299,6 +300,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     betikaAccounts: list('BETIKA_ACCOUNTS', []),
     chromePath: str('CHROME_PATH', ''),
     betikaBrowserProxy: str('BETIKA_BROWSER_PROXY', ''),
+    betikaPageTimeoutSeconds: num('BETIKA_PAGE_TIMEOUT_SECONDS', d.betikaPageTimeoutSeconds),
     ...overrides,
   });
 }

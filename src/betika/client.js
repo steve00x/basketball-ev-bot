@@ -106,8 +106,8 @@ export function classifyBetResponse(httpStatus, body) {
 
 export class BetikaClient {
   constructor({ headless = true, sessionDir = '.betika-session', chromePath = '', selectorsFile = '',
-    phone = '', password = '', proxy = '', betResponseTimeoutMs = 20000, fetchImpl = globalThis.fetch, log = console } = {}) {
-    Object.assign(this, { headless, sessionDir, chromePath, phone, password, proxy, betResponseTimeoutMs, fetchImpl, log });
+    phone = '', password = '', proxy = '', betResponseTimeoutMs = 20000, fetchImpl = globalThis.fetch, log = console, pageTimeoutMs = 30000 } = {}) {
+    Object.assign(this, { headless, sessionDir, chromePath, phone, password, proxy, betResponseTimeoutMs, fetchImpl, log, pageTimeoutMs });
     this.sel = loadSelectors(selectorsFile);
     this.browser = null;
     this.page = null;
@@ -151,7 +151,7 @@ export class BetikaClient {
    * Betika keeps live connections open, so "network idle" is not a usable signal.
    * Fails fast with a clear error after one retry instead of hanging.
    */
-  async goto(url, readySelector = this.sel.appReady, { timeoutMs = 30000, attempts = 2 } = {}) {
+  async goto(url, readySelector = this.sel.appReady, { timeoutMs = this.pageTimeoutMs ?? 30000, attempts = 2 } = {}) {
     let lastErr;
     for (let i = 1; i <= attempts; i++) {
       try {
