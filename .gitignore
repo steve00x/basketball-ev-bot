@@ -10,3 +10,6 @@ ev-bot-store-*.json*
 discover/
 oddspapi-cache.json
 logs/
+# other sportsbooks: recordings and their browser sessions (logins)
+record-*/
+.*-session/

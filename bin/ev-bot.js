@@ -16,6 +16,7 @@ import { review, taxLines } from '../src/review.js';
 import { strategyOf, strategyVerdicts } from '../src/insights.js';
 import { anchoredLiveEvents, recordAnchors, runModelCycle } from '../src/inplayModel.js';
 import { SteamTracker } from '../src/steam.js';
+import { recordBook } from '../src/books/record.js';
 import { PeriodPrices } from '../src/periods.js';
 import { BetikaWatch } from '../src/openers.js';
 import { attachBetikaOdds } from '../src/betika/odds.js';
@@ -39,6 +40,7 @@ Commands:
   login       open a visible browser and log in to Betika (session is saved)
   balance     print the Betika account balance
   review      bad luck or bad prices? wins vs what the fair odds predicted
+  record BOOK record another sportsbook's odds requests to add it (odibets, sportpesa, or any with --url)
   periods     check Pinnacle's 1st half / quarter prices on The Odds API (a few credits)
   discover    visible browser that records Betika API calls to ./discover/
 
@@ -62,7 +64,7 @@ try {
   parsed = parseArgs({
     allowPositionals: true,
     options: {
-      once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' }, account: { type: 'string' },
+      once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' }, account: { type: 'string' }, url: { type: 'string' },
       'min-ev': { type: 'string' }, env: { type: 'string', default: '.env' }, help: { type: 'boolean', short: 'h' },
     },
   });
@@ -599,6 +601,16 @@ const commands = {
   }),
 
   discover: () => withBrowser(async (c) => { await c.discover('discover'); return 0; }, { headless: false }),
+
+  // Record another sportsbook's data requests (to add it to the bot):  record odibets | record sportpesa | record qbet --url https://...
+  record: async () => {
+    const book = (positionals[1] ?? '').toLowerCase();
+    if (!book) { console.error('which sportsbook? e.g.  node bin/ev-bot.js record odibets'); return 2; }
+    try {
+      await recordBook({ book, url: opt.url, sessionDir: `.${book.replace(/[^a-z0-9]/g, '')}-session`, chromePath: s.chromePath, log });
+      return 0;
+    } catch (e) { log.error(e.message); return 2; }
+  },
 };
 
 if (!commands[cmd]) { console.error(`unknown command "${cmd}"\n\n${HELP}`); process.exit(2); }

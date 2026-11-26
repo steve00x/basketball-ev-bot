@@ -126,7 +126,7 @@ export class BetikaExecutor {
 }
 
 /**
- * Several Betika accounts on one scan: every pick goes to each account's executor in turn (each
+ * Several Betika accounts on one scan: every pick goes to every account's executor at once (each
  * with its own login, stake, limits, bet log and guards). Results reported are the main account's;
  * the others log their own lines tagged with the account name.
  */
@@ -144,11 +144,11 @@ export class MultiExecutor {
 
   check(opp, stake) { return this.main.check(opp, stake); }
 
+  /** All accounts at the same time: each has its own browser and bet log, so they never wait for each other. */
   async execute(opp) {
-    const r = await this.main.execute(opp);
-    for (const ex of this.extra) {
-      try { await ex.execute(opp); } catch (e) { this.log.warn?.(`betika [${ex.s.account}]: ${e.message}`); }
-    }
-    return r;
+    const [main, ...rest] = await Promise.allSettled([this.main, ...this.extra].map((ex) => ex.execute(opp)));
+    rest.forEach((x, i) => { if (x.status === 'rejected') this.log.warn?.(`betika [${this.extra[i].s.account}]: ${x.reason?.message ?? x.reason}`); });
+    if (main.status === 'rejected') throw main.reason;
+    return main.value;
   }
 }

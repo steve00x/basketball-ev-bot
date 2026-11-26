@@ -39,7 +39,7 @@ test('multi-account: every pick goes to each account with its own stake, limits 
     betikaRef: { parentMatchId: id, home: 'A', away: 'B', swapped: false } });
   await multi.execute(opp('1'));
   await multi.execute(opp('2'));                                   // dad's 1-bet daily limit is reached
-  assert.deepEqual(sent, [['main', 40, false], ['dad', 20, true], ['main', 40, false]]);
+  assert.deepEqual(sent.map(String).sort(), [['dad', 20, true], ['main', 40, false], ['main', 40, false]].map(String).sort());
   assert.equal(main.store.data.bets.length, 2);
   assert.equal(dad.store.data.bets.length, 1);
   assert.equal(multi.extraStores[0], dad.store);
@@ -58,4 +58,16 @@ test('dashboard: each account shows its own bets, balance and real-money switch'
   const paused = { ...state, pausedUntil: new Date(Date.now() + 600_000).toISOString(), accountState: { dad: { pausedUntil: null, halted: null } } };
   assert.ok(accountData(accts, 'main', paused).warnings.some((w) => /paused after errors/.test(w.title)));
   assert.ok(!accountData(accts, 'dad', paused).warnings.some((w) => /paused after errors/.test(w.title)));
+});
+
+test('multi-account: accounts place at the same time, not one after another', async () => {
+  const slow = (who, log) => ({ placeBet: async () => { log.push(`${who} start`); await new Promise((r) => setTimeout(r, 50)); log.push(`${who} end`); return { status: 'dry_run', odds: 2.2 }; } });
+  const log = [];
+  const mk = (who) => { const s = makeSettings({ betikaLive: false, betikaFixedStake: 40, winningsTax: {} }); s.account = who;
+    return new BetikaExecutor(s, slow(who, log), new Store(':memory:'), { log: quiet, notify: async () => {} }); };
+  const multi = new MultiExecutor(mk('main'), [mk('dad')], quiet);
+  multi.pausedStrategy = () => null;
+  await multi.execute({ book: 'betika', fairProb: 0.5, ev: 0.1, decimal: 2.2, stake: 40, eventId: 'z', market: 'h2h', outcome: 'A', homeTeam: 'A', awayTeam: 'B',
+    betikaRef: { parentMatchId: 'z', home: 'A', away: 'B', swapped: false } });
+  assert.deepEqual(log.slice(0, 2).sort(), ['dad start', 'main start']);   // both started before either finished
 });
