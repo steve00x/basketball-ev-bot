@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { attachBetikaOdds } from './betika/odds.js';
-import { SPORTS, resolveSportKeys, sportGroup } from './sports.js';
+import { SPORTS, isRemovedSport, resolveSportKeys, sportGroup } from './sports.js';
 import { OddsAPIError } from './oddsApi.js';
 import { dedupeKey, matchup, scanEvents, selection } from './scanner.js';
 import { recordClosing } from './insights.js';
@@ -69,15 +69,22 @@ export function bookPlan(s) {
 }
 
 /**
- * Odds API sport keys to scan. SPORTS may hold groups ("soccer", "tennis", "icehockey", ...)
+ * Odds API sport keys to scan. SPORTS may hold groups ("soccer", "tennis", "basketball", ...)
  * or exact keys ("soccer_epl"); groups expand to whatever is in season, via the free
  * /v4/sports call (cached for 6 hours).
  */
 // The in-season list is cached per Odds API client (6 hours); `lastSportsList` serves the sports command.
 let lastSportsList = null;
+let removedNoted = false;
 export async function resolveKeys(api, s, log = console) {
-  const needsList = s.sports.some((e) => SPORTS[e.toLowerCase()] || ['soccer', 'soccer_small', 'soccer_all'].includes(e.toLowerCase()));
-  if (!needsList) return s.sports;
+  const removed = s.sports.filter(isRemovedSport);
+  if (removed.length && !removedNoted) {
+    removedNoted = true;
+    log.info(`ice hockey is no longer part of the bot - ignoring ${removed.join(', ')} in SPORTS (you can delete it from .env)`);
+  }
+  const sports = s.sports.filter((e) => !isRemovedSport(e));
+  const needsList = sports.some((e) => SPORTS[e.toLowerCase()] || ['soccer', 'soccer_small', 'soccer_all'].includes(e.toLowerCase()));
+  if (!needsList) return sports;
   const sportsCache = (api.sportsCache ??= { at: 0, list: null });
   if (!sportsCache.list || Date.now() - sportsCache.at > 6 * 3600_000) {
     try {
@@ -85,11 +92,11 @@ export async function resolveKeys(api, s, log = console) {
       sportsCache.at = Date.now();
     } catch (e) {
       log.error(`could not list Odds API sports: ${e.message}`);
-      return s.sports.filter((e) => !SPORTS[e.toLowerCase()]);
+      return sports.filter((e) => !SPORTS[e.toLowerCase()]);
     }
   }
   lastSportsList = sportsCache.list;
-  const { keys, missing } = resolveSportKeys(s.sports, sportsCache.list);
+  const { keys, missing } = resolveSportKeys(sports, sportsCache.list);
   if (missing.length) log.info(`no Pinnacle-priced events on The Odds API right now for: ${missing.join(', ')}`);
   return keys;
 }

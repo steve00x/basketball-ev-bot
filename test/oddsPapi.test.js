@@ -39,12 +39,11 @@ const ctx = { markets, participants: { 3409: 'Chicago Bulls', 3410: 'Milwaukee B
   tournaments: { 132: { tournamentId: 132, tournamentName: 'NBA', categoryName: 'USA' } }, groupBySportId: { 11: 'basketball' } };
 
 test('sport names and market plans follow the settlement rules', () => {
-  assert.equal(groupForSportName('Ice Hockey'), 'icehockey');
+  assert.equal(groupForSportName('Ice Hockey'), null); // removed from the bot
   assert.equal(groupForSportName('Soccer'), 'soccer');
   assert.deepEqual(marketPlan('basketball').map((p) => `${p.type}/${p.period}`),
     ['moneyline/result', 'totals/result', 'teamtotals-team1/result', 'teamtotals-team2/result']); // incl. overtime, like Betika
   assert.deepEqual(marketPlan('soccer').map((p) => `${p.type}/${p.period}`), ['1x2/fulltime', 'totals/fulltime']); // 90 minutes
-  assert.deepEqual(marketPlan('icehockey').map((p) => `${p.type}/${p.period}`), ['moneyline/result']);
 });
 
 test('odds-by-tournaments -> events: right periods, all lines, team totals, inactive prices dropped', () => {

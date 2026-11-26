@@ -9,6 +9,9 @@
 // identical (same names, same points). A 3-way 1X2 (with Draw) can never be
 // compared with a 2-way moneyline, so a mismatch on that axis skips itself.
 
+/** Sports taken out of the bot: ignored even if SPORTS in .env still lists them (removed 2026-11-26). */
+export const isRemovedSport = (entry) => /^icehockey/i.test(String(entry).trim());
+
 export const SPORTS = {
   basketball: {
     title: 'Basketball', betikaSportId: 30, oddsApiPrefixes: ['basketball_'],
@@ -42,13 +45,6 @@ export const SPORTS = {
       { subType: 31, kind: 'clean_sheet', side: '1' }, { subType: 32, kind: 'clean_sheet', side: '2' },
       { subType: 33, kind: 'win_to_nil', side: '1' }, { subType: 34, kind: 'win_to_nil', side: '2' },
     ],
-  },
-  icehockey: {
-    // Betika's hockey 1X2 and Total are regulation-only; the NHL moneyline includes OT and
-    // shootout, so only "Winner (incl. overtime and penalties)" is comparable. No totals.
-    title: 'Ice Hockey', betikaSportId: 29, oddsApiPrefixes: ['icehockey_'],
-    oddsMarkets: ['h2h'],
-    h2h: { subType: 406, title: 'Winner (Incl. Overtime And Penalties)', draw: false },
   },
   tennis: {
     title: 'Tennis', betikaSportId: 28, oddsApiPrefixes: ['tennis_'],

@@ -23,10 +23,10 @@ export class OddsPapiError extends Error {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const DAY = 86400_000;
 
-/** OddsPapi sport name -> our sport group ("Ice Hockey" -> icehockey). */
+/** OddsPapi sport name -> our sport group ("Table Tennis" -> tabletennis); sports the bot doesn't cover -> null. */
 export function groupForSportName(name) {
   const n = String(name).toLowerCase().replace(/[^a-z]/g, '');
-  const table = { soccer: 'soccer', football: 'soccer', basketball: 'basketball', icehockey: 'icehockey', tennis: 'tennis',
+  const table = { soccer: 'soccer', football: 'soccer', basketball: 'basketball', tennis: 'tennis',
     tabletennis: 'tabletennis', volleyball: 'volleyball', cricket: 'cricket', boxing: 'boxing', handball: 'handball',
     rugby: 'rugby', rugbyunion: 'rugby', baseball: 'baseball' };
   return table[n] ?? null;

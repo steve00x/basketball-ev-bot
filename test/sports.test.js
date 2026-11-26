@@ -33,13 +33,13 @@ test('sport groups and Odds API key expansion', () => {
   assert.equal(sportGroup('tennis_atp_paris'), 'tennis');
   assert.equal(sportGroup('rugbyleague_nrl'), null); // league is 2-way: never pairs with Betika's 1X2
   assert.equal(sportGroup('rugbyunion_six_nations'), 'rugby');
-  assert.equal(sportGroup('icehockey_nhl'), 'icehockey');
+  assert.equal(sportGroup('icehockey_nhl'), null); // ice hockey removed from the bot
   const active = [{ key: 'soccer_epl' }, { key: 'soccer_brazil_campeonato' }, { key: 'icehockey_nhl' },
     { key: 'tennis_atp_finals' }, { key: 'soccer_epl_winner', has_outrights: true }, { key: 'basketball_nba' }];
   assert.deepEqual(resolveSportKeys(['soccer'], active).keys, ['soccer_epl']); // top leagues only
   assert.deepEqual(resolveSportKeys(['soccer_all'], active).keys, ['soccer_epl', 'soccer_brazil_campeonato']);
-  const r = resolveSportKeys(['icehockey', 'tennis', 'volleyball', 'basketball_nba', 'baseball_mlb'], active);
-  assert.deepEqual(r.keys, ['icehockey_nhl', 'tennis_atp_finals', 'basketball_nba']);
+  const r = resolveSportKeys(['tennis', 'volleyball', 'basketball_nba', 'baseball_mlb'], active);
+  assert.deepEqual(r.keys, ['tennis_atp_finals', 'basketball_nba']);
   assert.deepEqual(r.missing, ['volleyball', 'baseball_mlb']);
   // leagues that can never pair with Betika aren't paid for
   const r2 = resolveSportKeys(['cricket', 'rugby'], [{ key: 'cricket_test_match' }, { key: 'cricket_big_bash' }, { key: 'rugbyleague_nrl' }]);
@@ -49,7 +49,6 @@ test('sport groups and Odds API key expansion', () => {
 test('only comparable markets are bought per sport', () => {
   const s = makeSettings({ markets: ['h2h', 'totals'] });
   assert.deepEqual(marketsFor('soccer_epl', s), ['h2h', 'totals']);
-  assert.deepEqual(marketsFor('icehockey_nhl', s), ['h2h']); // Betika hockey totals are regulation-only
   assert.deepEqual(marketsFor('tennis_atp_finals', s), ['h2h']);
 });
 
@@ -78,18 +77,6 @@ test('3-way Betika vs 2-way Pinnacle never compare (e.g. baseball 9-inning 1X2 v
   attachBetikaOdds([ev], [m], NOW);
   assert.ok(ev.bookmakers.some((b) => b.key === 'betika')); // matched...
   assert.deepEqual(scanEvent(ev, makeSettings({ ...S, winningsTax: {} }), NOW), []); // ...but 3.0 vs fair 2.0 is never compared
-});
-
-test('ice hockey uses the overtime+penalties winner market, not regulation 1X2', () => {
-  const win = { data: [row('h1', 'New Jersey Devils', 'Columbus', 'NHL', w12(2.4, 1.6), '406', 'WINNER (INCL. OVERTIME AND PENALTIES)', 'USA')] };
-  const [m] = parseListings(win, null, SPORTS.icehockey, 'icehockey');
-  assert.deepEqual([m.winner, m.draw], [[2.4, 1.6], null]);
-  const ev = pinnacle('icehockey_nhl', 'New Jersey Devils', 'Columbus Blue Jackets',
-    [{ name: 'New Jersey Devils', price: 2.0 }, { name: 'Columbus Blue Jackets', price: 1.9 }]);
-  attachBetikaOdds([ev], [m], NOW);
-  const [o] = scanEvent(ev, S, NOW);
-  assert.equal(o.outcome, 'New Jersey Devils');
-  assert.deepEqual(betikaPick(o), { market: 'Winner (Incl. Overtime And Penalties)', label: '1' });
 });
 
 test('tennis: "Surname, First" names, ATP vs WTA, no UTR/doubles', () => {
@@ -128,11 +115,12 @@ test('fetchEvents expands groups via /sports and buys only comparable markets', 
     return new Response(JSON.stringify([{ id: 'e', sport_key: url.pathname.split('/')[3], commence_time: start, home_team: 'A', away_team: 'B', bookmakers: [] }]), { status: 200 });
   };
   const api = new OddsAPI('k', { fetchImpl });
-  const s = makeSettings({ sports: ['icehockey', 'soccer'], markets: ['h2h', 'totals'], betikaEnabled: true });
+  // ice hockey is removed from the bot: ignored even when .env still lists it (group or exact league)
+  const s = makeSettings({ sports: ['icehockey', 'icehockey_nhl', 'soccer'], markets: ['h2h', 'totals'], betikaEnabled: true });
   const evs = await fetchEvents(api, s, quiet);
-  assert.equal(evs.length, 2);
+  assert.equal(evs.length, 1);
   const odds = calls.filter((u) => u.pathname.endsWith('/odds')).map((u) => [u.pathname.split('/')[3], u.searchParams.get('markets')]);
-  assert.deepEqual(odds, [['icehockey_nhl', 'h2h'], ['soccer_epl', 'h2h,totals']]);
+  assert.deepEqual(odds, [['soccer_epl', 'h2h,totals']]);
 });
 
 test('soccer_small: lower leagues, only those in season; MARKETS_SOCCER halves the cost', async () => {
