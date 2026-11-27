@@ -218,17 +218,15 @@ async function scan() {
     // its balance: read now and with the hourly checks (shown on the dashboard; unaffordable bets skipped)
     const readOdiBalance = async () => {
       const b = await site.balance().catch((e) => ({ amount: null, reason: e.message }));
-      if (b.amount == null) return tag.warn(`odibets balance: ${b.reason}${b.reason === 'not logged in' ? ' - run: node bin/ev-bot.js record odibets, log in, close Chrome' : ''}`);
+      if (b.amount == null) return tag.warn(`odibets balance: ${b.reason}${b.reason === 'not logged in' ? ' - run: node bin/ev-bot.js login odibets (with the bot stopped)' : ''}`);
       odStore.data.balance = { amount: b.amount, at: new Date().toISOString() };
       odStore.save();
       tag.info(`odibets balance: KES ${b.amount}`);
     };
     accounts.push({ name: 'odibets', s: odS, store: odStore, log: tag, executor: odEx, close: () => site.close(), readBalance: readOdiBalance });
+    await readOdiBalance(); // now, not only at the hourly check, so the dashboard shows it from the start
     tag.info(`${odS.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - prices checked, bets never sent'} | stake ${odS.betikaFixedStake || 'Kelly'}`
       + ` | max ${odS.betikaMaxBetsPerDay} bets / KES ${odS.betikaDailyStakeLimit} a day`);
-    if (odS.betikaLive) {
-      site.login().then((a) => { if (!a) tag.warn('not logged in to OdiBets - run: node bin/ev-bot.js record odibets, log in, close Chrome'); }).catch(() => {});
-    }
   }
   log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`
     + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`
