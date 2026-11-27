@@ -42,6 +42,7 @@ Commands:
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
               --fresh: forget the saved session first (after changing the phone or password)
+  login odibets  log in to OdiBets once in a visible window (session saved for the bot)
   balance     print the Betika account balance
   review      bad luck or bad prices? wins vs what the fair odds predicted
   record BOOK record another sportsbook's odds requests to add it (odibets, sportpesa, or any with --url)
@@ -650,8 +651,21 @@ const commands = {
     });
   },
 
+  // login odibets: a visible OdiBets window to log in once (the session is saved for the bot)
   // login --fresh: forget the saved session first (after changing an account's phone or password)
-  login: () => (opt.fresh ? (fs.rmSync(s.betikaSessionDir, { recursive: true, force: true }), log.info(`cleared the saved Betika session (${s.betikaSessionDir}) - logging in with the details in .env${opt.account ? `.${opt.account}` : ''}`)) : null, withBrowser(async (c) => {
+  login: () => ((positionals[1] ?? '').toLowerCase() === 'odibets' ? (async () => {
+    if (opt.fresh) fs.rmSync(s.odibetsSessionDir, { recursive: true, force: true });
+    const site = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: false, log });
+    await site.start();
+    log.info('log in to OdiBets in the window, then close it (the login is saved for the bot)');
+    await new Promise((r) => site.browser.on('disconnected', r));
+    const check = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: true, log });
+    try {
+      const b = await check.balance();
+      log[b.amount != null ? 'info' : 'warn'](b.amount != null ? `logged in to OdiBets, balance: KES ${b.amount}` : `OdiBets: ${b.reason}`);
+      return b.amount != null ? 0 : 1;
+    } finally { await check.close(); }
+  })() : opt.fresh ? (fs.rmSync(s.betikaSessionDir, { recursive: true, force: true }), log.info(`cleared the saved Betika session (${s.betikaSessionDir}) - logging in with the details in .env${opt.account ? `.${opt.account}` : ''}`)) : null, withBrowser(async (c) => {
     log.info('complete any OTP/captcha in the browser window (3 min)...');
     await c.ensureLoggedIn({ waitMs: 180_000 });
     log.info(`logged in, balance: ${await c.readBalance().catch(() => null) ?? 'unknown'} - session saved to ${s.betikaSessionDir}`);
