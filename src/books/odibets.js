@@ -9,11 +9,14 @@
 // 18 total, 29 BTTS; basketball 219 winner, 223 handicap, 225 total, 227/228 team totals (incl. overtime).
 import puppeteer from 'puppeteer';
 import { parseEat } from '../betika/api.js';
+import { balanceFields } from '../betika/client.js';
 import { findRow } from '../teamMatch.js';
 
 export const ODIBETS_HOME = 'https://odibets.com/';
 const API = 'https://apis.odibets.com';
 const LIST_CACHE_MS = 15 * 60_000;
+const BET_URL = 'https://betting-api.apps.odibets.com/betting-api/api/v1/betting/sports/bets';
+const PROFILE_URL = 'https://accounts-api.apps.odibets.com/accounts-api/api/v1/accounts/profile';
 // market types the bot compares (asked for separately when OdiBets doesn't send them up front)
 const WANTED = { soccer: ['1', '10', '11', '18', '29'], basketball: ['219', '223', '225', '227', '228'] };
 
@@ -167,6 +170,25 @@ export class OdiBetsSite {
     return this.auth ?? null;
   }
 
+  /**
+   * Your OdiBets balance, from the account profile the site itself loads (with its login header).
+   * Only a field named like a balance is read; nothing else from the profile is kept or logged.
+   * Returns { amount } or { amount: null, reason }.
+   */
+  async balance() {
+    const auth = await this.login();
+    if (!auth) return { amount: null, reason: 'not logged in' };
+    const page = await this.start();
+    const r = await page.evaluate(async (url, auth) => {
+      try { const res = await fetch(url, { headers: { accept: 'application/json', authorization: auth } }); return { status: res.status, json: await res.json().catch(() => null) }; }
+      catch (e) { return { status: 0, json: null }; }
+    }, PROFILE_URL, auth);
+    if (r.status !== 200 || !r.json) return { amount: null, reason: `profile HTTP ${r.status}` };
+    const hits = balanceFields(r.json);
+    const pick = hits.find((h) => h.main) ?? hits[0];
+    return pick ? { amount: pick.value } : { amount: null, reason: 'no balance field in the profile' };
+  }
+
   /** POST from the OdiBets page with its login header (cross-site, the way its bet slip sends it). */
   async post(url, body) {
     const page = await this.start();
@@ -225,7 +247,6 @@ function looksSame(ev, markets) {
   return sharp.outcomes.every((o) => { const s = ob.outcomes.find((x) => x.name === o.name); return s && Math.abs(1 / s.price - 1 / o.price) < 0.15; });
 }
 
-const BET_URL = 'https://betting-api.apps.odibets.com/betting-api/api/v1/betting/sports/bets';
 
 /** The bet slip body, as OdiBets' own slip sends it - except auto_accept: a changed price is refused, never taken. */
 export function betBody(ref, odds, stake) {

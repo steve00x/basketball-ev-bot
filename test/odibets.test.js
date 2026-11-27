@@ -87,3 +87,13 @@ test('OdiBets real bet: sent like its own bet slip, never auto-accepting a chang
   assert.equal((await c.placeBet({ ref: { game: '9001', sub: '219', spec: '', oid: '5' }, sport: 'basketball', minOdds: 2.5, stake: 10, live: true })).status, 'price_moved');
   assert.equal(posted.length, 1);
 });
+
+test('OdiBets balance: only a balance-named field of the profile is read', async () => {
+  const { OdiBetsSite } = await import('../src/books/odibets.js');
+  const site = new OdiBetsSite({ log: quiet });
+  site.login = async () => 'Bearer x';
+  site.start = async () => ({ evaluate: async () => ({ status: 200, json: { data: { msisdn: '2547…', first_name: 'J', balance: '1,250.50', bonus_balance: 30 } } }) });
+  assert.deepEqual(await site.balance(), { amount: 1250.5 });
+  site.login = async () => null;
+  assert.equal((await site.balance()).reason, 'not logged in');
+});

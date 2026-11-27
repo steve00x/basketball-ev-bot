@@ -212,7 +212,15 @@ async function scan() {
     executors.odibets = odEx;
     feeds.push({ name: 'odibets', attach: (evs, now) => attachOdiBets(evs, site, now, tag) });
     s.ownFeedBooks = [...new Set([...(s.ownFeedBooks ?? []), 'odibets'])];
-    accounts.push({ name: 'odibets', s: odS, store: odStore, log: tag, executor: odEx, close: () => site.close() });
+    // its balance: read now and with the hourly checks (shown on the dashboard; unaffordable bets skipped)
+    const readOdiBalance = async () => {
+      const b = await site.balance().catch((e) => ({ amount: null, reason: e.message }));
+      if (b.amount == null) return tag.warn(`odibets balance: ${b.reason}${b.reason === 'not logged in' ? ' - run: node bin/ev-bot.js record odibets, log in, close Chrome' : ''}`);
+      odStore.data.balance = { amount: b.amount, at: new Date().toISOString() };
+      odStore.save();
+      tag.info(`odibets balance: KES ${b.amount}`);
+    };
+    accounts.push({ name: 'odibets', s: odS, store: odStore, log: tag, executor: odEx, close: () => site.close(), readBalance: readOdiBalance });
     tag.info(`${odS.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - prices checked, bets never sent'} | stake ${odS.betikaFixedStake || 'Kelly'}`
       + ` | max ${odS.betikaMaxBetsPerDay} bets / KES ${odS.betikaDailyStakeLimit} a day`);
     if (odS.betikaLive) {
@@ -371,6 +379,7 @@ async function scan() {
         }
         // Betika's own record of placed bets (status and payout), read from My Bets
         for (const a of accounts) {
+          if (a.readBalance) { await a.readBalance(); continue; } // other sportsbooks (OdiBets)
           if (!a.client || !a.s.betikaLive) continue;
           if (s.betikaHistory) {
             try { await checkBetikaHistory(a.client, a.store, a.log); } catch (e) { a.log.warn(`betika history: ${e.message.split('\n')[0]}`); }
@@ -647,7 +656,15 @@ const commands = {
   }, { headless: false }),
 
   // Read the balance the way the bot does and show where on Betika's page it was found
-  balance: () => withBrowser(async (c) => {
+  balance: () => (positionals[1] ?? '').toLowerCase() === 'odibets' ? (async () => {
+    // node bin/ev-bot.js balance odibets
+    const site = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: s.betikaHeadless, log });
+    try {
+      const b = await site.balance();
+      console.log(b.amount != null ? `odibets balance: KES ${b.amount}` : `odibets balance: not found (${b.reason})`);
+      return b.amount != null ? 0 : 1;
+    } finally { await site.close(); }
+  })() : withBrowser(async (c) => {
     await c.ensureLoggedIn();
     const v = await c.readBalance();
     console.log(`balance: ${v ?? 'not found'}`);
