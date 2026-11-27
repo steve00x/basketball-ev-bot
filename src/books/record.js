@@ -67,6 +67,8 @@ export function summarize(calls, book) {
     const priv = PRIVATE_PATH.test(g.k);
     lines.push(`## ${g.k}  (x${g.n}, HTTP ${[...g.status].join('/')})`);
     if (g.params.size) lines.push(`params: ${[...g.params].slice(0, 25).join('&')}`);
+    const hdrs = [...new Set(g.calls.flatMap((c) => c.headers ?? []))];
+    if (hdrs.length) lines.push(`headers sent (names only): ${hdrs.join(', ')}`);
     if (priv) { lines.push('(account endpoint: contents not recorded)', ''); continue; }
     const last = g.calls.at(-1);
     if (last.request != null) lines.push(`sent: ${sample(scrub(last.request), 800)}`);
@@ -100,7 +102,9 @@ export async function recordBook({ book, url, sessionDir, chromePath, log = cons
       try { sent = sent && JSON.parse(sent); } catch { /* keep text */ }
       for (const k of [...u.searchParams.keys()]) if (SECRET_KEY.test(k)) u.searchParams.set(k, 'redacted');
       const priv = PRIVATE_PATH.test(u.pathname);
-      calls.push({ url: u.href, method: req.method(), status: res.status(), request: priv ? null : sent, response: priv ? null : body });
+      // header names show how a site recognises the login (e.g. "authorization"); values are never kept
+      const headers = Object.keys(req.headers()).filter((h) => !/^(accept|accept-language|accept-encoding|user-agent|referer|origin|content-length|connection|host|sec-|cookie$|priority|cache-control|pragma)/i.test(h)).sort();
+      calls.push({ url: u.href, method: req.method(), status: res.status(), request: priv ? null : sent, response: priv ? null : body, headers });
     } catch { /* body gone after navigation */ }
   });
   page.on('dialog', (d) => d.accept().catch(() => {}));

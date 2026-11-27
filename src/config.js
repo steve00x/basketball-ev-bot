@@ -147,6 +147,12 @@ export const DEFAULTS = Object.freeze({
   guardMinClv: -0.01,          // pause when their average CLV is below -1%
   guardWindow: 100,            // judge the most recent picks only
   guardMinBetsInPlay: 100,     // in play: settled picks needed (then: 2+ sd fewer wins than predicted)
+  odibets: false,              // also price OdiBets (dry runs only until its bet login is recorded)
+  odibetsFixedStake: 0,
+  odibetsMaxBetsPerDay: 10,
+  odibetsDailyStakeLimit: 2000,
+  odibetsSessionDir: '.odibets-session',
+  odibetsStorePath: 'ev-bot-store-odibets.json',
   sportpesa: false,            // also bet on SportPesa (needs: node bin/ev-bot.js record sportpesa, logged in once)
   sportpesaLive: false,        // real SportPesa bets (dry runs otherwise)
   sportpesaFixedStake: 0,      // 0 = same as BETIKA_FIXED_STAKE
@@ -271,6 +277,12 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     guardMinClv: num('GUARD_MIN_CLV', d.guardMinClv),
     guardWindow: num('GUARD_WINDOW', d.guardWindow),
     guardMinBetsInPlay: num('GUARD_MIN_BETS_INPLAY', d.guardMinBetsInPlay),
+    odibets: bool('ODIBETS', d.odibets),
+    odibetsFixedStake: num('ODIBETS_FIXED_STAKE', d.odibetsFixedStake),
+    odibetsMaxBetsPerDay: num('ODIBETS_MAX_BETS_PER_DAY', d.odibetsMaxBetsPerDay),
+    odibetsDailyStakeLimit: num('ODIBETS_DAILY_STAKE_LIMIT', d.odibetsDailyStakeLimit),
+    odibetsSessionDir: str('ODIBETS_SESSION_DIR', d.odibetsSessionDir),
+    odibetsStorePath: str('ODIBETS_STORE_PATH', d.odibetsStorePath),
     sportpesa: bool('SPORTPESA', d.sportpesa),
     sportpesaLive: bool('SPORTPESA_LIVE', d.sportpesaLive),
     sportpesaFixedStake: num('SPORTPESA_FIXED_STAKE', d.sportpesaFixedStake),

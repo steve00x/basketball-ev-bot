@@ -20,6 +20,7 @@ import { recordBook } from '../src/books/record.js';
 import { PeriodPrices } from '../src/periods.js';
 import { BetikaWatch } from '../src/openers.js';
 import { SportPesaClient, SportPesaSite, attachSportPesa, sportpesaPickFor } from '../src/books/sportpesa.js';
+import { OdiBetsClient, OdiBetsSite, attachOdiBets, odibetsPickFor } from '../src/books/odibets.js';
 import { attachBetikaOdds } from '../src/betika/odds.js';
 import { settlePending } from '../src/settle.js';
 import { applyHistory, historyShape, matchHistory, statusWords } from '../src/betika/history.js';
@@ -192,6 +193,27 @@ async function scan() {
     accounts.push({ name: 'sportpesa', s: spS, store: spStore, log: tag, executor: spEx, close: () => site.close() });
     tag.info(`${spS.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - prices checked, bets never sent'} | stake ${spS.betikaFixedStake || 'Kelly'}`
       + ` | max ${spS.betikaMaxBetsPerDay} bets / KES ${spS.betikaDailyStakeLimit} a day | no tax on winnings`);
+  }
+  // OdiBets (ODIBETS=true): priced like Betika, its own bet log and dashboard view; dry runs only for now
+  if (s.odibets) {
+    const tag = { info: (m) => log.info(`[odibets] ${m}`), warn: (m) => log.warn(`[odibets] ${m}`), error: (m) => log.error(`[odibets] ${m}`) };
+    const odS = { ...s, account: 'odibets', betikaLive: false, liveBetsLive: false,
+      betikaFixedStake: s.odibetsFixedStake || s.betikaFixedStake, betikaMinStake: Math.max(10, s.betikaMinStake ?? 10),
+      betikaMaxBetsPerDay: s.odibetsMaxBetsPerDay, betikaDailyStakeLimit: s.odibetsDailyStakeLimit, storePath: s.odibetsStorePath };
+    let rel;
+    try { rel = acquireLock(odS.storePath); } catch (e) { log.error(`[odibets] ${e.message}`); return 1; }
+    process.on('exit', rel);
+    const odStore = new Store(odS.storePath, { log: tag });
+    const site = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: s.betikaHeadless, log: tag,
+      timeoutMs: Math.max(60, s.betikaPageTimeoutSeconds ?? 30) * 1000 });
+    const odEx = new BetikaExecutor(odS, new OdiBetsClient(site, { log: tag }), odStore,
+      { log: tag, notify: (t) => notifier.sendText(`[odibets] ${t}`), book: 'odibets', title: 'OdiBets', pickFor: odibetsPickFor });
+    odEx.pausedStrategy = (opp) => (s.strategyGuard ? botState.pausedStrategies?.[strategyOf(opp)] ?? null : null);
+    executors.odibets = odEx;
+    feeds.push({ name: 'odibets', attach: (evs, now) => attachOdiBets(evs, site, now, tag) });
+    s.ownFeedBooks = [...new Set([...(s.ownFeedBooks ?? []), 'odibets'])];
+    accounts.push({ name: 'odibets', s: odS, store: odStore, log: tag, executor: odEx, close: () => site.close() });
+    tag.info(`DRY RUN - prices checked, bets never sent (real OdiBets bets come after one more recording) | stake ${odS.betikaFixedStake || 'Kelly'}`);
   }
   log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`
     + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`
