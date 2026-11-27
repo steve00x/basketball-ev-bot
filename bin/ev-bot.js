@@ -194,10 +194,10 @@ async function scan() {
     tag.info(`${spS.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - prices checked, bets never sent'} | stake ${spS.betikaFixedStake || 'Kelly'}`
       + ` | max ${spS.betikaMaxBetsPerDay} bets / KES ${spS.betikaDailyStakeLimit} a day | no tax on winnings`);
   }
-  // OdiBets (ODIBETS=true): priced like Betika, its own bet log and dashboard view; dry runs only for now
+  // OdiBets (ODIBETS=true): priced like Betika, its own bet log and dashboard view; real bets with ODIBETS_LIVE=true
   if (s.odibets) {
     const tag = { info: (m) => log.info(`[odibets] ${m}`), warn: (m) => log.warn(`[odibets] ${m}`), error: (m) => log.error(`[odibets] ${m}`) };
-    const odS = { ...s, account: 'odibets', betikaLive: false, liveBetsLive: false,
+    const odS = { ...s, account: 'odibets', betikaLive: s.odibetsLive, liveBetsLive: false,
       betikaFixedStake: s.odibetsFixedStake || s.betikaFixedStake, betikaMinStake: Math.max(10, s.betikaMinStake ?? 10),
       betikaMaxBetsPerDay: s.odibetsMaxBetsPerDay, betikaDailyStakeLimit: s.odibetsDailyStakeLimit, storePath: s.odibetsStorePath };
     let rel;
@@ -213,7 +213,11 @@ async function scan() {
     feeds.push({ name: 'odibets', attach: (evs, now) => attachOdiBets(evs, site, now, tag) });
     s.ownFeedBooks = [...new Set([...(s.ownFeedBooks ?? []), 'odibets'])];
     accounts.push({ name: 'odibets', s: odS, store: odStore, log: tag, executor: odEx, close: () => site.close() });
-    tag.info(`DRY RUN - prices checked, bets never sent (real OdiBets bets come after one more recording) | stake ${odS.betikaFixedStake || 'Kelly'}`);
+    tag.info(`${odS.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - prices checked, bets never sent'} | stake ${odS.betikaFixedStake || 'Kelly'}`
+      + ` | max ${odS.betikaMaxBetsPerDay} bets / KES ${odS.betikaDailyStakeLimit} a day`);
+    if (odS.betikaLive) {
+      site.login().then((a) => { if (!a) tag.warn('not logged in to OdiBets - run: node bin/ev-bot.js record odibets, log in, close Chrome'); }).catch(() => {});
+    }
   }
   log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`
     + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`

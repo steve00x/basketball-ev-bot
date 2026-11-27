@@ -147,7 +147,8 @@ export const DEFAULTS = Object.freeze({
   guardMinClv: -0.01,          // pause when their average CLV is below -1%
   guardWindow: 100,            // judge the most recent picks only
   guardMinBetsInPlay: 100,     // in play: settled picks needed (then: 2+ sd fewer wins than predicted)
-  odibets: false,              // also price OdiBets (dry runs only until its bet login is recorded)
+  odibets: false,              // also bet on OdiBets (log in once with: node bin/ev-bot.js record odibets)
+  odibetsLive: false,          // real OdiBets bets (dry runs otherwise)
   odibetsFixedStake: 0,
   odibetsMaxBetsPerDay: 10,
   odibetsDailyStakeLimit: 2000,
@@ -278,6 +279,7 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     guardWindow: num('GUARD_WINDOW', d.guardWindow),
     guardMinBetsInPlay: num('GUARD_MIN_BETS_INPLAY', d.guardMinBetsInPlay),
     odibets: bool('ODIBETS', d.odibets),
+    odibetsLive: bool('ODIBETS_LIVE', d.odibetsLive),
     odibetsFixedStake: num('ODIBETS_FIXED_STAKE', d.odibetsFixedStake),
     odibetsMaxBetsPerDay: num('ODIBETS_MAX_BETS_PER_DAY', d.odibetsMaxBetsPerDay),
     odibetsDailyStakeLimit: num('ODIBETS_DAILY_STAKE_LIMIT', d.odibetsDailyStakeLimit),

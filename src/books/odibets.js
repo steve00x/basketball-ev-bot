@@ -2,8 +2,9 @@
 // Its automated-browser test passed (2026-11-27): odds requests answer normally, nothing to disguise.
 //   games   GET apis.odibets.com/odi/sportsbook?resource=sportevents&sport_id={soccer|basketball}&day={YYYY-MM-DD}
 //   odds    GET apis.odibets.com/sportsbook/v1?resource=sportevent&id={parent_match_id}&sport_id={slug}
-//   bet     POST betting-api.apps.odibets.com/betting-api/api/v1/betting/sports/bets  (needs the login header:
-//           not recorded yet, so real OdiBets bets stay off - dry runs only)
+//   bet     POST betting-api.apps.odibets.com/betting-api/api/v1/betting/sports/bets with the login
+//           "authorization" header the site itself sends (taken from its own requests, kept in memory only)
+//           -> { response_status: 200, response_message: "You placed BetID 54869 #30026#2#10.0. POSSIBLE WIN: ...", bet_id, bet_reference }
 // Market numbers are the same as Betika's (Sportradar): 1 = 1X2, 10 double chance, 11 draw no bet,
 // 18 total, 29 BTTS; basketball 219 winner, 223 handicap, 225 total, 227/228 team totals (incl. overtime).
 import puppeteer from 'puppeteer';
@@ -82,6 +83,13 @@ export class OdiBetsSite {
     const [page] = await this.browser.pages();
     this.page = page ?? (await this.browser.newPage());
     this.page.on('dialog', (d) => d.accept().catch(() => {}));
+    // the login: OdiBets' own pages send it as an "authorization" header (never logged or saved)
+    this.page.on('request', (req) => {
+      try {
+        const h = req.headers().authorization;
+        if (h && /(^|\.)odibets\.com$/.test(new URL(req.url()).hostname)) this.auth = h;
+      } catch { /* ignore */ }
+    });
     await this.page.goto(ODIBETS_HOME, { waitUntil: 'domcontentloaded', timeout: this.timeoutMs }).catch((e) => this.log.warn?.(`odibets: ${e.message}`));
     return this.page;
   }
@@ -152,6 +160,27 @@ export class OdiBetsSite {
     return data;
   }
 
+  /** The login header, waiting up to `waitMs` for the site's own requests to show it. Null = not logged in. */
+  async login({ waitMs = 15000 } = {}) {
+    await this.start();
+    for (let t = 0; !this.auth && t < waitMs; t += 500) await new Promise((r) => setTimeout(r, 500));
+    return this.auth ?? null;
+  }
+
+  /** POST from the OdiBets page with its login header (cross-site, the way its bet slip sends it). */
+  async post(url, body) {
+    const page = await this.start();
+    const auth = await this.login();
+    if (!auth) return { status: 401, json: null, text: 'not logged in' };
+    return page.evaluate(async (url, body, auth) => {
+      try {
+        const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json', authorization: auth }, body: JSON.stringify(body) });
+        const text = await res.text();
+        try { return { status: res.status, json: JSON.parse(text) }; } catch { return { status: res.status, json: null, text: text.slice(0, 200) }; }
+      } catch (e) { return { status: 0, json: null, text: String(e.message ?? e) }; }
+    }, url, body, auth);
+  }
+
   async close() {
     if (this.browser?.connected) await this.browser.close().catch(() => {});
     this.browser = this.page = null;
@@ -196,14 +225,40 @@ function looksSame(ev, markets) {
   return sharp.outcomes.every((o) => { const s = ob.outcomes.find((x) => x.name === o.name); return s && Math.abs(1 / s.price - 1 / o.price) < 0.15; });
 }
 
+const BET_URL = 'https://betting-api.apps.odibets.com/betting-api/api/v1/betting/sports/bets';
+
+/** The bet slip body, as OdiBets' own slip sends it - except auto_accept: a changed price is refused, never taken. */
+export function betBody(ref, odds, stake) {
+  return { channel: 'DESKTOPSPA', possible_win: Math.round(stake * odds * 100) / 100, bet_total_odds: odds, stake_amount: stake,
+    auto_accept: false, free_bet: false, bet_type: '0', attribution: 'SPA',
+    slip: [{ parent_match_id: String(ref.game), sub_type_id: String(ref.sub), sport_id: String(ref.sportNum ?? ''), outcome_name: ref.oname,
+      specifiers: ref.spec ?? '', outcome_id: String(ref.oid), odd_value: odds, live: false, bet_type: '0' }] };
+}
+
+/** What OdiBets' reply means. Anything unclear is 'unknown' (the bot then stops betting there). */
+export function classifyOdiBets(r, stake, odds) {
+  const j = r?.json;
+  if (!r || r.status === 0) return { status: 'error', message: r?.text ?? 'no reply' };
+  if (r.status === 401 || r.status === 403) return { status: 'not_logged_in', message: `HTTP ${r.status}` };
+  const msg = String(j?.response_message ?? j?.message ?? j?.status_description ?? '');
+  if (j && Number(j.response_status ?? r.status) === 200 && j.bet_id) {
+    const st = /#([\d.]+)\.\s*POSSIBLE/i.exec(msg); // "You placed BetID 54869 #30026#2#10.0. POSSIBLE WIN: Ksh 15.3."
+    const confirmed = st ? Number(st[1]) : stake;
+    return { status: 'placed', odds, betId: String(j.bet_reference ?? j.bet_id), betIdLong: j.bet_id, confirmedStake: confirmed,
+      ...(Math.abs(confirmed - stake) > 0.01 ? { stakeMismatch: true } : {}), message: msg };
+  }
+  if (j && (j.response_status != null || msg)) return { status: 'rejected', odds, message: msg || `code ${j.response_status}` };
+  return { status: 'unknown', odds, message: `HTTP ${r.status} ${r.text ?? ''}` };
+}
+
 /**
- * Bet placer (same interface as Betika's). Re-reads the selection's current price; a dry run stops
- * there. Real bets are not available yet (OdiBets' login header isn't recorded): always a dry run.
+ * Bet placer (same interface as Betika's). Re-reads the selection's current price (that market type
+ * only); a dry run stops there; a real bet is sent like OdiBets' own bet slip, with auto_accept off.
  */
 export class OdiBetsClient {
   constructor(site, { log = console } = {}) { Object.assign(this, { site, log }); }
 
-  async placeBet({ ref, sport, minOdds, live = false }) {
+  async placeBet({ ref, sport, minOdds, stake, live = false }) {
     let game;
     try { game = await this.site.game(ref.game, sport, { only: ref.sub }); } catch (e) { return { status: 'error', message: e.message }; }
     const m = (game.markets ?? []).find((x) => String(x.sub_type_id) === ref.sub && (x.specifiers ?? '') === (ref.spec ?? ''));
@@ -211,7 +266,9 @@ export class OdiBetsClient {
     if (!o || String(o.active ?? '1') !== '1') return { status: 'outcome_not_found' };
     const odds = Number(o.odd_value);
     if (!(odds >= minOdds)) return { status: 'price_moved', odds, minOdds };
-    return { status: 'dry_run', odds, ...(live ? { message: 'real OdiBets bets are not switched on yet - dry run' } : {}) };
+    if (!live) return { status: 'dry_run', odds };
+    const r = await this.site.post(BET_URL, betBody({ ...ref, sportNum: ref.sportNum ?? game.info?.sport_id }, odds, stake));
+    return classifyOdiBets(r, stake, odds);
   }
 
   async close() { await this.site.close(); }

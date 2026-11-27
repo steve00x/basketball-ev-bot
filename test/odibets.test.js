@@ -42,7 +42,7 @@ test('OdiBets football: 1X2, double chance, draw no bet, totals, BTTS', () => {
   assert.deepEqual(m.soccer_props.map((x) => [x.betikaLabel, x.rule.btts]), [['YES', true], ['NO', false]]);
 });
 
-test('OdiBets end to end: matched, priced against Pinnacle, price re-checked; always a dry run for now', async () => {
+test('OdiBets end to end: matched, priced against Pinnacle, price re-checked (dry run)', async () => {
   const now = new Date('2026-11-27T10:00:00Z');
   const iso = now.toISOString();
   const calls = [];
@@ -55,11 +55,35 @@ test('OdiBets end to end: matched, priced against Pinnacle, price re-checked; al
   await attachOdiBets([ev], site, now, quiet);
   assert.ok(ev.bookmakers.some((b) => b.key === 'odibets'));
   const s = makeSettings({ betikaEnabled: false, ownFeedBooks: ['odibets'], minEv: 0.02, winningsTax: {}, maxLineAgeSeconds: 300, altTotals: false, teamTotals: false, soccerModel: false });
-  const ex = new BetikaExecutor({ ...s, betikaLive: true, betikaFixedStake: 40 }, new OdiBetsClient(site, { log: quiet }), new Store(':memory:'),
+  const ex = new BetikaExecutor({ ...s, betikaLive: false, betikaFixedStake: 40 }, new OdiBetsClient(site, { log: quiet }), new Store(':memory:'),
     { log: quiet, book: 'odibets', title: 'OdiBets', pickFor: odibetsPickFor });
   const r = await runCycle({ events: [ev], s, store: new Store(':memory:'), notifier: { sendOpportunities: async () => {} }, executors: { odibets: ex }, log: quiet, now });
   // Pinnacle 1.75 / 2.15 -> fair Heat ~45%; OdiBets 2.37 = +6%
   const heat = r.results.find((x) => x.opp.outcome === 'Miami Heat');
   assert.equal(heat?.result.status, 'dry_run', JSON.stringify(r.results.map((x) => [x.opp.outcome, x.result])));
   assert.equal(calls.at(-1), '219');                         // price re-checked for that one market type
+});
+
+test('OdiBets real bet: sent like its own bet slip, never auto-accepting a changed price; replies read', async () => {
+  const { betBody, classifyOdiBets } = await import('../src/books/odibets.js');
+  const ref = { game: '71516060', sub: '1', spec: '', oid: '3', oname: 'Denver Broncos', sportNum: '16' };
+  assert.deepEqual(betBody(ref, 1.53, 10), { channel: 'DESKTOPSPA', possible_win: 15.3, bet_total_odds: 1.53, stake_amount: 10, auto_accept: false,
+    free_bet: false, bet_type: '0', attribution: 'SPA', slip: [{ parent_match_id: '71516060', sub_type_id: '1', sport_id: '16', outcome_name: 'Denver Broncos',
+      specifiers: '', outcome_id: '3', odd_value: 1.53, live: false, bet_type: '0' }] });
+  // the recorded reply (2026-11-27)
+  const ok = { status: 200, json: { response_status: 200, response_message: 'You placed BetID 54869 #30026#2#10.0. POSSIBLE WIN: Ksh 15.3.', bet_id: 1890751912, bet_reference: '54869' } };
+  assert.deepEqual(['status', 'betId', 'confirmedStake'].map((k) => classifyOdiBets(ok, 10, 1.53)[k]), ['placed', '54869', 10]);
+  assert.equal(classifyOdiBets(ok, 40, 1.53).stakeMismatch, true);
+  assert.equal(classifyOdiBets({ status: 200, json: { response_status: 421, response_message: 'Odds have changed' } }, 10, 1.5).status, 'rejected');
+  assert.equal(classifyOdiBets({ status: 401, json: null }, 10, 1.5).status, 'not_logged_in');
+  assert.equal(classifyOdiBets({ status: 500, json: null, text: 'oops' }, 10, 1.5).status, 'unknown');
+  // the client: price checked, then posted with the bet slip body
+  const posted = [];
+  const site = { game: async () => nba, post: async (url, body) => { posted.push([url, body]); return ok; } };
+  const c = new OdiBetsClient(site, { log: quiet });
+  const r = await c.placeBet({ ref: { game: '9001', sub: '219', spec: '', oid: '5', oname: 'Miami Heat', sportNum: '2' }, sport: 'basketball', minOdds: 2.3, stake: 10, live: true });
+  assert.equal(r.status, 'placed');
+  assert.equal(posted[0][1].slip[0].odd_value, 2.37);
+  assert.equal((await c.placeBet({ ref: { game: '9001', sub: '219', spec: '', oid: '5' }, sport: 'basketball', minOdds: 2.5, stake: 10, live: true })).status, 'price_moved');
+  assert.equal(posted.length, 1);
 });
