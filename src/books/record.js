@@ -32,7 +32,15 @@ export function scrub(v, depth = 0) {
 export function sample(v, max = 1800) {
   const cut = (x, d) => {
     if (d > 7) return '...';
-    if (Array.isArray(x)) return x.length > 2 ? [...x.slice(0, 2).map((y) => cut(y, d + 1)), `... ${x.length} items`] : x.map((y) => cut(y, d + 1));
+    if (Array.isArray(x)) {
+      if (x.length <= 2) return x.map((y) => cut(y, d + 1));
+      // a list of markets (id + name): the first two in full, then every one as id:name(line) - what's on offer
+      if (x.every((o) => o && typeof o === 'object' && 'id' in o && 'name' in o)) {
+        const all = x.map((o) => `${o.id}:${o.name}${o.specValue ? `(${o.specValue})` : ''}`).slice(0, 120).join(' | ');
+        return [...x.slice(0, 2).map((y) => cut(y, d + 1)), `all ${x.length}: ${all}`];
+      }
+      return [...x.slice(0, 2).map((y) => cut(y, d + 1)), `... ${x.length} items`];
+    }
     if (x && typeof x === 'object') return Object.fromEntries(Object.entries(x).slice(0, 30).map(([k, y]) => [k, cut(y, d + 1)]));
     return typeof x === 'string' && x.length > 80 ? `${x.slice(0, 80)}...` : x;
   };
@@ -62,7 +70,8 @@ export function summarize(calls, book) {
     if (priv) { lines.push('(account endpoint: contents not recorded)', ''); continue; }
     const last = g.calls.at(-1);
     if (last.request != null) lines.push(`sent: ${sample(scrub(last.request), 800)}`);
-    lines.push(`reply: ${sample(scrub(last.response))}`, '');
+    // market lists are worth more room: every market's id and name
+    lines.push(`reply: ${sample(scrub(last.response), /markets/i.test(g.k) ? 9000 : 1800)}`, '');
   }
   return lines.join('\n');
 }

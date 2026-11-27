@@ -27,3 +27,10 @@ test('samples stay short: first two items of long lists', () => {
   assert.match(s, /\.\.\. 50 items/);
   assert.ok(s.length < 400);
 });
+
+test('market lists: every market id and name is kept, so the right markets can be chosen', () => {
+  const markets = [...Array(25)].map((_, i) => ({ id: 100 + i, name: `Market ${i}`, specValue: i % 2 ? 2.5 : 0, selections: [{ name: 'Over', odds: '1.9' }] }));
+  const s = sample({ 9537975: markets }, 9000);
+  assert.match(s, /all 25: 100:Market 0 \| 101:Market 1\(2\.5\)/);
+  assert.match(s, /124:Market 24/);
+});
