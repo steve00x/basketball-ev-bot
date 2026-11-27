@@ -5,6 +5,22 @@ import { findRow, teamSimilarity } from '../teamMatch.js';
 const MAX_START_DIFF_MS = 90 * 60_000;
 
 /**
+ * Do Betika's winner prices look like the sharp book's for this game? Implied chances may differ
+ * by bookmaker margin and a real edge, not by 15+ points (a different game, or the teams swapped).
+ */
+function samePriceShape(ev, hit) {
+  const m = hit.row;
+  if (!m.winner) return false;
+  const sharp = (ev.bookmakers ?? []).find((b) => b.key !== 'betika' && b.markets?.some((x) => x.key === 'h2h'))?.markets.find((x) => x.key === 'h2h');
+  if (!sharp) return false;
+  const p = (name) => { const o = sharp.outcomes.find((x) => x.name === name); return o ? 1 / o.price : null; };
+  const [b1, b2] = hit.swapped ? [m.winner[1], m.winner[0]] : m.winner;
+  const pairs = [[p(ev.home_team), 1 / b1], [p(ev.away_team), 1 / b2]];
+  if (m.draw && p('Draw') != null) pairs.push([p('Draw'), 1 / m.draw]);
+  return pairs.every(([x, y]) => x != null && Math.abs(x - y) < 0.15);
+}
+
+/**
  * Mutates `events`: adds a betika bookmaker (h2h, plus totals where comparable) and
  * `event.betikaRef` { sport, parentMatchId, home, away, swapped } for the bet placer.
  * A Betika match must be the same sport, in a fitting competition (no women's/youth/
@@ -22,7 +38,9 @@ export function attachBetikaOdds(events, matches, now = new Date(), { live = fal
     const start = new Date(ev.commence_time);
     const candidates = matches.filter((m) => !used.has(m) && (m.sport ?? 'basketball') === sport
       && inComp(m.competition) && Math.abs(m.start - start) <= MAX_START_DIFF_MS);
-    const hit = findRow(ev, candidates);
+    let hit = findRow(ev, candidates);
+    // matched on one team + kick-off only: accept only if Betika's prices look like the same game
+    if (hit?.loose && !samePriceShape(ev, hit)) hit = null;
     if (!hit) {
       // Only blame the names if some Betika game at that time shares a team with this one.
       const score = (m) => Math.max(

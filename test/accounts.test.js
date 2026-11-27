@@ -91,3 +91,19 @@ test('several sportsbooks: each gets its own picks, and all books place at the s
   assert.deepEqual(log.slice(0, 2).sort(), ['betika start betika', 'odibets start odibets']); // both before either finished
   assert.equal(log.length, 4);
 });
+
+test('low balance: after Betika says "usable balance 3.87" the bot stops opening slips it cannot afford (for 20 min)', async () => {
+  let calls = 0;
+  const client = { placeBet: async () => { calls++; return { status: 'rejected', message: 'stake 40.00 is more than the usable balance 3.87' }; } };
+  const store = new Store(':memory:');
+  const ex = new BetikaExecutor(makeSettings({ betikaLive: true, betikaFixedStake: 40, winningsTax: {} }), client, store, { log: quiet, notify: async () => {} });
+  const opp = (id) => ({ book: 'betika', fairProb: 0.5, ev: 0.1, decimal: 2.2, stake: 40, eventId: id, market: 'h2h', outcome: 'A', homeTeam: 'A', awayTeam: 'B',
+    betikaRef: { parentMatchId: id, home: 'A', away: 'B', swapped: false } });
+  await ex.execute(opp('1'));
+  assert.equal(store.data.balance.amount, 3.87);
+  const r = await ex.execute(opp('2'));
+  assert.deepEqual([r.status, r.reason, calls], ['skipped', 'insufficient_balance', 1]);
+  store.data.balance.at = new Date(Date.now() - 25 * 60_000).toISOString();   // 25 min later: try again (a deposit may have come in)
+  await ex.execute(opp('3'));
+  assert.equal(calls, 2);
+});

@@ -24,6 +24,12 @@ export class BetikaExecutor {
     if (!opp.betikaRef || !betikaPick(opp)) return 'unsupported_market';
     if (this.store.hasBet(dedupeKey(opp))) return 'already_bet';
     if (stake < this.s.betikaMinStake) return 'stake_too_small';
+    // a recent balance (Betika's own reading, or its "usable balance" in a rejection) below the stake:
+    // don't open the bet slip for a bet Betika will refuse. Trusted for 20 minutes, so a deposit shows up soon.
+    const bal = this.store.data.balance;
+    if (this.s.betikaLive && !opp.dryRunOnly && bal?.amount != null && Date.now() - new Date(bal.at) < 20 * 60_000 && bal.amount < stake) {
+      return 'insufficient_balance';
+    }
     const today = this.store.liveBetsToday(LIVE_STATUSES);
     if (today.length >= this.s.betikaMaxBetsPerDay) return 'daily_bet_limit';
     if (today.reduce((a, b) => a + b.stake, 0) + stake > this.s.betikaDailyStakeLimit) return 'daily_stake_limit';
@@ -80,6 +86,11 @@ export class BetikaExecutor {
         this.notify(`Betika bot: 3 errors in a row, betting paused ${mins} min (last: ${e.message})`).catch(() => {});
       }
     }
+
+    // Betika told us the balance: remember it (and skip unaffordable bets for a while)
+    const usable = /usable balance\s*(?:KES|Ksh)?\s*([\d,]+(?:\.\d+)?)/i.exec(result.message ?? '');
+    if (usable) this.store.data.balance = { amount: Number(usable[1].replace(/,/g, '')), at: new Date().toISOString() };
+    else if (result.balanceAfter != null) this.store.data.balance = { amount: result.balanceAfter, at: new Date().toISOString() };
 
     this.store.recordBet({
       key: dedupeKey(opp), at: new Date().toISOString(), matchup: matchup(opp),
