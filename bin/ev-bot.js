@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // CLI: ev-bot <scan|check|login|odds|balance|discover> [options]
+import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { BetikaAPI } from '../src/betika/api.js';
 import { BetikaClient } from '../src/betika/client.js';
@@ -40,6 +41,7 @@ Commands:
   leagues S [text]  list OddsPapi league ids for sport S, e.g. leagues basketball euroleague
   odds [S]    print Betika's upcoming odds for sport S (default basketball)
   login       open a visible browser and log in to Betika (session is saved)
+              --fresh: forget the saved session first (after changing the phone or password)
   balance     print the Betika account balance
   review      bad luck or bad prices? wins vs what the fair odds predicted
   record BOOK record another sportsbook's odds requests to add it (odibets, sportpesa, or any with --url)
@@ -66,7 +68,7 @@ try {
   parsed = parseArgs({
     allowPositionals: true,
     options: {
-      once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' }, account: { type: 'string' }, url: { type: 'string' },
+      once: { type: 'boolean' }, demo: { type: 'boolean' }, live: { type: 'boolean' }, account: { type: 'string' }, url: { type: 'string' }, fresh: { type: 'boolean' },
       'min-ev': { type: 'string' }, env: { type: 'string', default: '.env' }, help: { type: 'boolean', short: 'h' },
     },
   });
@@ -648,12 +650,13 @@ const commands = {
     });
   },
 
-  login: () => withBrowser(async (c) => {
+  // login --fresh: forget the saved session first (after changing an account's phone or password)
+  login: () => (opt.fresh ? (fs.rmSync(s.betikaSessionDir, { recursive: true, force: true }), log.info(`cleared the saved Betika session (${s.betikaSessionDir}) - logging in with the details in .env${opt.account ? `.${opt.account}` : ''}`)) : null, withBrowser(async (c) => {
     log.info('complete any OTP/captcha in the browser window (3 min)...');
     await c.ensureLoggedIn({ waitMs: 180_000 });
     log.info(`logged in, balance: ${await c.readBalance().catch(() => null) ?? 'unknown'} - session saved to ${s.betikaSessionDir}`);
     return 0;
-  }, { headless: false }),
+  }, { headless: false })),
 
   // Read the balance the way the bot does and show where on Betika's page it was found
   balance: () => (positionals[1] ?? '').toLowerCase() === 'odibets' ? (async () => {
