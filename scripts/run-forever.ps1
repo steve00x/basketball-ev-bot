@@ -8,6 +8,9 @@
 # Exit codes: 0 = stopped by you, 2 = wrong command or settings (fix and start again): no restart.
 # @(...) keeps this a list even with one item (Windows PowerShell 5.1 would turn 'scan' into plain text)
 [string[]]$botArgs = @(if ($args.Count) { $args } else { 'scan' })
+# read and write the bot's output as UTF-8, so names like "Alavés" or "Köln" show correctly
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 Set-Location (Split-Path -Parent $PSScriptRoot)
 New-Item -ItemType Directory -Force -Path logs | Out-Null
 while ($true) {

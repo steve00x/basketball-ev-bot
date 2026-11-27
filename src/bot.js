@@ -214,6 +214,15 @@ export const liveSettings = (s) => ({ ...s, inPlay: true, minEv: Math.max(s.live
  * One scan + bet pass. In play, `guard` (LiveGuard) blocks picks priced before the current score
  * and `confirm(opp, event, scanSettings)` re-prices a pick with a fresh Pinnacle price before betting.
  */
+/** The minimum EV a pick of this kind needs (model-priced picks need more than MIN_EV). */
+export function minEvFor(o, s) {
+  const kind = o.model?.kind;
+  if (o.market === 'soccer_props') return Math.max(s.soccerModelMinEv ?? 0, s.minEv);
+  if (kind === 'alt-total') return Math.max(s.altTotalsMinEv ?? 0, s.minEv);
+  if (kind === 'team-total') return Math.max(s.teamTotalsMinEv ?? 0, s.minEv);
+  return o.minEv ?? s.minEv;
+}
+
 export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false, guard = null, confirm = null,
   steam = null, decorate = null, now = new Date(), enrich = null, executors = null, feeds = null }) {
   if (live) s = liveSettings(s);
@@ -261,7 +270,7 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
       closest = `${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal}: ${(best.ev * 100).toFixed(1)}% EV`;
       log.info(`closest: ${selection(best)} (${matchup(best)}) @ ${best.bookTitle} ${best.decimal} = `
         + `${(best.ev * 100).toFixed(1)}% EV after tax (${((best.fairProb * best.decimal + (best.pushProb ?? 0) - 1) * 100).toFixed(1)}% before tax) `
-        + `vs fair ${((1 - (best.pushProb ?? 0)) / best.fairProb).toFixed(2)} (need +${(s.minEv * 100).toFixed(1)}%)`);
+        + `vs fair ${((1 - (best.pushProb ?? 0)) / best.fairProb).toFixed(2)} (need +${(minEvFor(best, s) * 100).toFixed(1)}%)`);
     }
   }
   await notifier.sendOpportunities(fresh);
