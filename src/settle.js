@@ -21,6 +21,13 @@ export function gradePick(g, hs, as) {
       if (g.outcome === g.homeTeam) return hs > as ? 'won' : 'lost';
       if (g.outcome === g.awayTeam) return as > hs ? 'won' : 'lost';
       return null;
+    case 'spreads': { // handicap: the team's score plus its points against the other team's
+      if (g.point == null) return null;
+      const mine = g.outcome === g.homeTeam ? hs : g.outcome === g.awayTeam ? as : null;
+      if (mine == null) return null;
+      const diff = mine + g.point - (g.outcome === g.homeTeam ? as : hs);
+      return diff === 0 ? 'push' : diff > 0 ? 'won' : 'lost';
+    }
     case 'totals':
       if (g.point == null) return null;
       return cmp(hs + as, g.point, g.outcome === 'Over');

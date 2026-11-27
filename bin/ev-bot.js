@@ -19,6 +19,7 @@ import { SteamTracker } from '../src/steam.js';
 import { recordBook } from '../src/books/record.js';
 import { PeriodPrices } from '../src/periods.js';
 import { BetikaWatch } from '../src/openers.js';
+import { SportPesaClient, SportPesaSite, attachSportPesa, sportpesaPickFor } from '../src/books/sportpesa.js';
 import { attachBetikaOdds } from '../src/betika/odds.js';
 import { settlePending } from '../src/settle.js';
 import { applyHistory, historyShape, matchHistory, statusWords } from '../src/betika/history.js';
@@ -169,6 +170,29 @@ async function scan() {
     executor.pausedStrategy = (opp) => (s.strategyGuard ? botState.pausedStrategies?.[strategyOf(opp)] ?? null : null);
     accounts[0].executor = executor;
   }
+  // SportPesa (SPORTPESA=true): its own browser session, bet log, stake and limits; bets at the same time as Betika
+  const executors = {}, feeds = [];
+  if (s.sportpesa) {
+    const tag = { info: (m) => log.info(`[sportpesa] ${m}`), warn: (m) => log.warn(`[sportpesa] ${m}`), error: (m) => log.error(`[sportpesa] ${m}`) };
+    const spS = { ...s, account: 'sportpesa', betikaLive: s.sportpesaLive, liveBetsLive: false,
+      betikaFixedStake: s.sportpesaFixedStake || s.betikaFixedStake, betikaMinStake: Math.max(10, s.betikaMinStake ?? 10),
+      betikaMaxBetsPerDay: s.sportpesaMaxBetsPerDay, betikaDailyStakeLimit: s.sportpesaDailyStakeLimit, storePath: s.sportpesaStorePath };
+    let rel;
+    try { rel = acquireLock(spS.storePath); } catch (e) { log.error(`[sportpesa] ${e.message}`); return 1; }
+    process.on('exit', rel);
+    const spStore = new Store(spS.storePath, { log: tag });
+    const site = new SportPesaSite({ sessionDir: s.sportpesaSessionDir, chromePath: s.chromePath, headless: s.betikaHeadless, log: tag,
+      timeoutMs: Math.max(60, s.betikaPageTimeoutSeconds ?? 30) * 1000 });
+    const spEx = new BetikaExecutor(spS, new SportPesaClient(site, { log: tag }), spStore,
+      { log: tag, notify: (t) => notifier.sendText(`[sportpesa] ${t}`), book: 'sportpesa', title: 'SportPesa', pickFor: sportpesaPickFor });
+    spEx.pausedStrategy = (opp) => (s.strategyGuard ? botState.pausedStrategies?.[strategyOf(opp)] ?? null : null);
+    executors.sportpesa = spEx;
+    feeds.push({ name: 'sportpesa', attach: (evs, now) => attachSportPesa(evs, site, now, tag) });
+    s.ownFeedBooks = [...new Set([...(s.ownFeedBooks ?? []), 'sportpesa'])];
+    accounts.push({ name: 'sportpesa', s: spS, store: spStore, log: tag, executor: spEx, close: () => site.close() });
+    tag.info(`${spS.betikaLive ? 'LIVE - real bets will be placed' : 'DRY RUN - prices checked, bets never sent'} | stake ${spS.betikaFixedStake || 'Kelly'}`
+      + ` | max ${spS.betikaMaxBetsPerDay} bets / KES ${spS.betikaDailyStakeLimit} a day | no tax on winnings`);
+  }
   log.info(`scanning ${s.sports.join(',')} | sharp=${s.sharpBooks.join(',')} | min EV ${(s.minEv * 100).toFixed(1)}% | devig=${s.devigMethod}`
     + ` | alt totals ${s.altTotals ? `on (min ${(s.altTotalsMinEv * 100).toFixed(1)}%)` : 'off'}`
     + ` | live betting ${s.liveBetting ? `${s.liveBetsLive && s.betikaLive ? 'REAL' : 'dry run'} (${s.liveSports.join('/')}, every ${s.livePollSeconds}s, min ${(Math.max(s.liveMinEv, s.minEv) * 100).toFixed(1)}%)` : 'off'}`
@@ -263,7 +287,7 @@ async function scan() {
           const evs = lastEvents.filter((e) => e.betikaRef && changed.has(e.betikaRef.parentMatchId) && new Date(e.commence_time) > new Date());
           if (evs.length) {
             log.info(`betika watch: ${changed.size} Betika game(s) with new or changed prices, ${evs.length} with Pinnacle prices - checking`);
-            track(await runCycle({ events: evs, s, store, notifier, betika: null, executor, log, steam, decorate: tagOpener }), 'betika watch');
+            track(await runCycle({ events: evs, s, store, notifier, betika: null, executor, log, steam, decorate: tagOpener, executors }), 'betika watch');
           }
           events = null;
         } else if (kind === 'steam') {
@@ -286,7 +310,7 @@ async function scan() {
           log.info(`fast scan: ${fastGroups.join(', ')} games starting within ${s.fastScanMinutes} min`);
           events = await fetchEvents(api, s, log, { onlyGroups: fastGroups, horizonHours: s.fastScanMinutes / 60, quietKeys: true });
         }
-        const r = events?.length ? await runCycle({ events, s, store, notifier, betika, executor, log, steam, enrich, decorate: tagOpener }) : { found: Infinity };
+        const r = events?.length ? await runCycle({ events, s, store, notifier, betika, executor, log, steam, enrich, decorate: tagOpener, executors, feeds }) : { found: Infinity };
         if (events?.length) {
           track(r, kind);
           // pre-match Pinnacle prices for the in-play model
@@ -304,7 +328,7 @@ async function scan() {
             const extra = await papi.fetchEvents(s, sportGroupsOf(s.sports));
             const m = mergeEvents(events, extra, { similarity: teamSimilarity, groupOf: (k) => sportGroup(k) });
             log.info(`oddspapi: ${m.joined} games got extra Pinnacle lines, ${m.added} new games`);
-            track(await runCycle({ events: m.events, s, store, notifier, betika, executor, log, steam, decorate: tagOpener }), 'full + oddspapi');
+            track(await runCycle({ events: m.events, s, store, notifier, betika, executor, log, steam, decorate: tagOpener, executors, feeds }), 'full + oddspapi');
             botState.oddsPapi = { requestsUsedThisRun: papi.requestsUsed };
           } catch (e) {
             log.warn(`oddspapi: ${e instanceof OddsPapiError ? e.message : (e.stack ?? e)}`);
@@ -351,7 +375,7 @@ async function scan() {
       for (let t = 0; t < plan.waitMs / 1000 && !stopping; t++) await sleep(1000);
     }
   } finally {
-    for (const a of accounts) await a.client?.close();
+    for (const a of accounts) { await a.client?.close(); await a.close?.(); }
     release();
   }
   return 0;

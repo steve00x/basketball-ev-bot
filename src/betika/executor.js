@@ -6,9 +6,20 @@ import { betikaPick } from './odds.js';
 // Statuses that may have taken money: these count toward the daily limits.
 const LIVE_STATUSES = new Set(['placed', 'unknown']);
 
+/** Betika: where to click for a pick (null if Betika has no comparable market). */
+const betikaPickFor = (opp) => {
+  if (!opp.betikaRef) return null;
+  const pick = betikaPick(opp);
+  return pick ? { parentMatchId: opp.betikaRef.parentMatchId, ...pick, ...(opp.inPlay ? { liveMatchId: opp.betikaRef.liveMatchId } : {}) } : null;
+};
+
 export class BetikaExecutor {
-  constructor(settings, client, store, { log = console, notify = async () => {} } = {}) {
-    Object.assign(this, { s: settings, client, store, log, notify });
+  /**
+   * Works for any sportsbook: `book` is its key in the scan, `title` its name in the log, and
+   * `pickFor(opp)` what its client's placeBet needs for that pick (null = market not supported).
+   */
+  constructor(settings, client, store, { log = console, notify = async () => {}, book = 'betika', title = 'Betika', pickFor = betikaPickFor } = {}) {
+    Object.assign(this, { s: settings, client, store, log, notify, book, title, pickFor });
     this.halted = false;         // only for a stake mismatch: scanning continues, betting stops
     this.consecutiveErrors = 0;
     this.pausedUntil = 0;        // after repeated errors, betting pauses briefly, then resumes
@@ -20,8 +31,8 @@ export class BetikaExecutor {
   check(opp, stake) {
     if (this.halted) return 'halted';
     if (Date.now() < this.pausedUntil) return 'paused_after_errors';
-    if (opp.book !== 'betika') return 'not_betika';
-    if (!opp.betikaRef || !betikaPick(opp)) return 'unsupported_market';
+    if (opp.book !== this.book) return 'not_this_book';
+    if (!this.pickFor(opp)) return 'unsupported_market';
     if (this.store.hasBet(dedupeKey(opp))) return 'already_bet';
     if (stake < this.s.betikaMinStake) return 'stake_too_small';
     // a recent balance (Betika's own reading, or its "usable balance" in a rejection) below the stake:
@@ -43,7 +54,7 @@ export class BetikaExecutor {
       : Math.floor(Math.min(opp.stake, this.s.betikaMaxStake));
     const skip = this.check(opp, stake);
     if (skip) {
-      if (!['not_betika', 'already_bet'].includes(skip)) this.log.info?.(`betika: skip ${selection(opp)} (${skip})`);
+      if (!['not_this_book', 'already_bet'].includes(skip)) this.log.info?.(`${this.book}: skip ${selection(opp)} (${skip})`);
       return { status: 'skipped', reason: skip };
     }
     // Lowest after-tax price that still clears MIN_EV, and the posted price that gives it.
@@ -54,16 +65,15 @@ export class BetikaExecutor {
     const minOdds = Math.max(beforeTax(minEffective, opp.winningsTax ?? 0), opp.minOddsFloor ?? this.s.minDecimalOdds);
     const round3 = (x) => Math.ceil(x * 1000) / 1000;
     if (!Number.isFinite(minOdds) || !Number.isFinite(minEffective) || !Number.isFinite(opp.fairProb)) {
-      this.log.error?.(`betika: refusing ${selection(opp)} - price floor is not a number (check MIN_EV / tax settings)`);
+      this.log.error?.(`${this.book}: refusing ${selection(opp)} - price floor is not a number (check MIN_EV / tax settings)`);
       return { status: 'skipped', reason: 'bad_settings' };
     }
-    if (opp.inPlay && !opp.betikaRef.liveMatchId) return { status: 'skipped', reason: 'no_live_match' };
+    if (opp.inPlay && !opp.betikaRef?.liveMatchId) return { status: 'skipped', reason: 'no_live_match' };
     // strategy guard: a strategy whose picks show no edge bets as dry runs until it recovers
     const paused = this.pausedStrategy?.(opp) ?? null;
-    if (paused && this.s.betikaLive) this.log.info?.(`betika: ${selection(opp)} - strategy paused (${paused}), dry run`);
+    if (paused && this.s.betikaLive) this.log.info?.(`${this.book}: ${selection(opp)} - strategy paused (${paused}), dry run`);
     const bet = {
-      parentMatchId: opp.betikaRef.parentMatchId, ...betikaPick(opp),
-      ...(opp.inPlay ? { liveMatchId: opp.betikaRef.liveMatchId } : {}),
+      ...this.pickFor(opp),
       minOdds: round3(minOdds), minEffectiveOdds: round3(minEffective),
       // in-play bets are real only when LIVE_BETS_LIVE is also on (dry run otherwise)
       stake, live: this.s.betikaLive && (!opp.inPlay || this.s.liveBetsLive) && !opp.dryRunOnly && !paused,
@@ -111,7 +121,7 @@ export class BetikaExecutor {
     const ticket = result.betId ? ` ticket ${result.betId}` : '';
     const bal = result.balanceAfter != null ? ` | balance KES ${result.balanceAfter}` : '';
     const inPlay = opp.inPlay ? ` [LIVE ${opp.betikaRef.period ?? ''} ${opp.betikaRef.clock ?? ''} ${opp.betikaRef.score ?? ''}]`.replace(/\s+]/, ']') : '';
-    const msg = `Betika ${result.status.toUpperCase()}${ticket}${inPlay}: ${selection(opp)} (${matchup(opp)}) `
+    const msg = `${this.title} ${result.status.toUpperCase()}${ticket}${inPlay}: ${selection(opp)} (${matchup(opp)}) `
       + `stake KES ${stake} @ ${result.odds ?? '?'} (min ${bet.minOdds})${bal}${result.message && result.status !== 'placed' ? ` - ${result.message}` : ''}`;
     this.log.info?.(msg);
     // Phone/Discord alerts only for outcomes that matter; price moves etc. retry quietly next scan.

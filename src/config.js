@@ -147,6 +147,13 @@ export const DEFAULTS = Object.freeze({
   guardMinClv: -0.01,          // pause when their average CLV is below -1%
   guardWindow: 100,            // judge the most recent picks only
   guardMinBetsInPlay: 100,     // in play: settled picks needed (then: 2+ sd fewer wins than predicted)
+  sportpesa: false,            // also bet on SportPesa (needs: node bin/ev-bot.js record sportpesa, logged in once)
+  sportpesaLive: false,        // real SportPesa bets (dry runs otherwise)
+  sportpesaFixedStake: 0,      // 0 = same as BETIKA_FIXED_STAKE
+  sportpesaMaxBetsPerDay: 10,
+  sportpesaDailyStakeLimit: 2000,
+  sportpesaSessionDir: '.sportpesa-session',
+  sportpesaStorePath: 'ev-bot-store-sportpesa.json',
   openers: true,               // re-read Betika between full scans to catch new listings / price changes
   openersPollSeconds: 60,
   openersWindowMinutes: 30,    // picks on markets Betika listed this recently are tagged "opener"
@@ -264,6 +271,13 @@ export function settingsFromEnv(dotenv = '.env', overrides = {}) {
     guardMinClv: num('GUARD_MIN_CLV', d.guardMinClv),
     guardWindow: num('GUARD_WINDOW', d.guardWindow),
     guardMinBetsInPlay: num('GUARD_MIN_BETS_INPLAY', d.guardMinBetsInPlay),
+    sportpesa: bool('SPORTPESA', d.sportpesa),
+    sportpesaLive: bool('SPORTPESA_LIVE', d.sportpesaLive),
+    sportpesaFixedStake: num('SPORTPESA_FIXED_STAKE', d.sportpesaFixedStake),
+    sportpesaMaxBetsPerDay: num('SPORTPESA_MAX_BETS_PER_DAY', d.sportpesaMaxBetsPerDay),
+    sportpesaDailyStakeLimit: num('SPORTPESA_DAILY_STAKE_LIMIT', d.sportpesaDailyStakeLimit),
+    sportpesaSessionDir: str('SPORTPESA_SESSION_DIR', d.sportpesaSessionDir),
+    sportpesaStorePath: str('SPORTPESA_STORE_PATH', d.sportpesaStorePath),
     openers: bool('OPENERS', d.openers),
     openersPollSeconds: num('OPENERS_POLL_SECONDS', d.openersPollSeconds),
     openersWindowMinutes: num('OPENERS_WINDOW_MINUTES', d.openersWindowMinutes),

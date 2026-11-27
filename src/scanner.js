@@ -171,6 +171,28 @@ export function scanEvent(event, s, now = new Date()) {
   if (mainTotal && mainSpread && s.teamTotals && sportGroup(event.sport_key ?? '') === 'basketball') {
     opps.push(...scanTeamTotals(event, s, now, start, mainTotal, mainSpread, sharpSet, targetSet, sharpTeamTotals));
   }
+  return withRefs(event, opps);
+}
+
+const refKey = (book, market, description, outcome, point) => [book, market, description ?? '', outcome, point ?? ''].join('|');
+
+/**
+ * Bookmakers that bet by selection id (SportPesa) put `ref` on each outcome: give every pick the ref
+ * of the exact price it was priced on, whichever model found it.
+ */
+function withRefs(event, opps) {
+  const refs = new Map();
+  for (const bm of event.bookmakers ?? []) {
+    for (const m of bm.markets ?? []) {
+      for (const o of m.outcomes ?? []) if (o.ref) refs.set(refKey(bm.key, m.key, o.description, o.name, o.point), o.ref);
+    }
+  }
+  if (!refs.size) return opps;
+  for (const o of opps) {
+    if (o.ref) continue;
+    const r = refs.get(refKey(o.book, o.market, o.description, o.outcome, o.point));
+    if (r) o.ref = r;
+  }
   return opps;
 }
 

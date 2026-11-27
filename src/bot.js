@@ -215,7 +215,7 @@ export const liveSettings = (s) => ({ ...s, inPlay: true, minEv: Math.max(s.live
  * and `confirm(opp, event, scanSettings)` re-prices a pick with a fresh Pinnacle price before betting.
  */
 export async function runCycle({ events, s, store, notifier, betika = null, executor = null, log = console, live = false, guard = null, confirm = null,
-  steam = null, decorate = null, now = new Date(), enrich = null, executors = null }) {
+  steam = null, decorate = null, now = new Date(), enrich = null, executors = null, feeds = null }) {
   if (live) s = liveSettings(s);
   if (betika) {
     try {
@@ -230,6 +230,8 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
     }
   }
   if (live && guard) guard.observe(events);
+  // other sportsbooks with their own odds feed (SportPesa): add their prices to the same games
+  if (!live) for (const f of feeds ?? []) { try { await f.attach(events, now); } catch (e) { log.warn(`${f.name ?? 'feed'}: ${e.message}`); } }
   // extra sharp prices that depend on which markets Betika has (1st half / quarter)
   if (enrich && !live) { try { await enrich(events); } catch (e) { log.warn(`periods: ${e.message}`); } }
   const scanSettings = { ...s, targetBooks: bookPlan(s).scanTargets };
@@ -240,7 +242,11 @@ export async function runCycle({ events, s, store, notifier, betika = null, exec
   log.info(`found ${opps.length} +EV ${live ? 'LIVE ' : ''}bets (${fresh.length} new)`);
   // Every priced pick at any EV: the closest call (below) and closing prices for CLV
   const priced = scanEvents(events, { ...scanSettings, minEv: -1, altTotalsMinEv: -1, teamTotalsMinEv: -1, soccerModelMinEv: -1, soccerModelMaxEv: Infinity }, now);
-  if (!live) for (const st of [store, ...(executor?.extraStores ?? [])]) if (recordClosing(st.data.bets, priced)) st.save();
+  if (!live) {
+    for (const st of [store, ...(executor?.extraStores ?? []), ...Object.values(executors ?? {}).map((e) => e.store)]) {
+      if (st && recordClosing(st.data.bets, priced)) st.save();
+    }
+  }
   if (!live && steam) {
     // Pinnacle moving towards a pick: tagged; moving away: not bet until it settles
     steam.observe(priced);
