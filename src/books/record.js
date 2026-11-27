@@ -99,7 +99,11 @@ export async function recordBook({ book, url, sessionDir, chromePath, log = cons
   log.info?.(`recording ${spec.title}: browse football and basketball, open a match, add one pick to the bet slip (do NOT place it), then close the browser window`);
   await new Promise((r) => browser.on('disconnected', r));
   const summary = summarize(calls, spec.title);
-  fs.writeFileSync(path.join(outDir, 'summary.txt'), summary);
-  log.info?.(`${calls.length} data requests recorded - send me ${outDir}${path.sep}summary.txt (personal data already removed)`);
-  return { calls: calls.length, file: path.join(outDir, 'summary.txt') };
+  // every recording keeps its own file (a second run never replaces the first)
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, '').replace('T', '-');
+  const file = path.join(outDir, `summary-${stamp}.txt`);
+  fs.writeFileSync(file, summary);
+  fs.writeFileSync(path.join(outDir, 'summary.txt'), summary); // also the latest, under the usual name
+  log.info?.(`${calls.length} data requests recorded - send me ${file} (personal data already removed)`);
+  return { calls: calls.length, file };
 }
