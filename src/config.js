@@ -66,7 +66,9 @@ export function parseNumber(raw, name = 'value') {
   if (/^-?\d+,\d+$/.test(t)) t = t.replace(',', '.'); // "0,02" (comma decimal)
   const n = Number(t);
   if (t === '' || !Number.isFinite(n)) {
-    throw new SettingsError(`${name}=${raw} in .env is not a number (write it like ${name}=0.02)`);
+    // a fitting example: shares as 0.02 / 2%, everything else as a whole number
+    const example = /EV|TAX|PCT|FRACTION|MOVE|CLV/i.test(name) ? '0.02' : /PORT/i.test(name) ? '3000' : /STAKE|LIMIT|BANKROLL/i.test(name) ? '40' : '30';
+    throw new SettingsError(`${name}=${raw} in .env is not a number (write it like ${name}=${example} - one setting per line, nothing else on it)`);
   }
   return pct ? n / 100 : n;
 }
