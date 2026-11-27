@@ -38,3 +38,10 @@ test('different teams never match', () => {
   attachBetikaOdds([pin], [other], now);
   assert.equal(pin.betikaRef, undefined);
 });
+
+test('accented names never look like women\'s teams ("Kraków" is not "Krak W")', () => {
+  assert.equal(teamSimilarity('Wisła Kraków', 'Wisla Krakow'), 1);
+  assert.equal(teamSimilarity('Bodø/Glimt', 'Bodo Glimt'), 1);
+  assert.equal(teamSimilarity('Arsenal W', 'Arsenal'), 0);   // a real women's side still never matches
+  assert.ok(findRow({ home_team: 'Wisła Kraków', away_team: 'Motor Lublin', commence_time: T }, [{ home: 'Wisla Krakow', away: 'LKP Motor Lublin', start: new Date(T) }]));
+});

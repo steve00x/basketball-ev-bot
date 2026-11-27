@@ -112,7 +112,10 @@ export function sameToken(a, b) {
 
 /** Women's / youth / reserve markers. Two names must carry the same ones to match. */
 export function qualifiers(name) {
-  const s = ` ${String(name).toLowerCase().replace(/[^a-z0-9()]+/g, ' ')} `;
+  // accents first ("Kraków" -> "krakow"), else "krak w" would look like a women's "W" side
+  const plain = String(name).replace(/[øØ]/g, 'o').replace(/[æÆ]/g, 'ae').replace(/ß/g, 'ss').replace(/[đĐ]/g, 'd').replace(/[łŁ]/g, 'l')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const s = ` ${plain.toLowerCase().replace(/[^a-z0-9()]+/g, ' ')} `;
   const q = new Set();
   // "Team W" at the end is a women's side; "W. Kentucky" (W at the start) is Western Kentucky
   if (/\b(women|womens|ladies|female)\b|\(w\)|\sw\s$/.test(s)) q.add('women');
