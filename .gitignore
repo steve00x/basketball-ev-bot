@@ -13,3 +13,4 @@ logs/
 # other sportsbooks: recordings and their browser sessions (logins)
 record-*/
 .*-session/
+betika-page-problem.png

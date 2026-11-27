@@ -169,6 +169,13 @@ export class BetikaClient {
         this.log.warn?.(`betika: ${url} not ready (attempt ${i}/${attempts}): ${e.message.split('\n')[0]}`);
       }
     }
+    // what the page showed instead: a screenshot and its first words, to see why (stays on this PC)
+    try {
+      const seen = await this.page.evaluate(() => ({ title: document.title, url: location.href,
+        text: (document.body?.innerText ?? '').replace(/\s+/g, ' ').slice(0, 160) }));
+      await this.page.screenshot({ path: 'betika-page-problem.png' });
+      this.log.warn?.(`betika: the page showed "${seen.title}" at ${seen.url}: "${seen.text}" - screenshot saved as betika-page-problem.png`);
+    } catch { /* page gone */ }
     throw new Error(`Betika page did not load: ${url} (${lastErr.message.split('\n')[0]})`);
   }
 
