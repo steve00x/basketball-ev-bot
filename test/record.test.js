@@ -23,7 +23,7 @@ test('recordings never keep personal data: secret keys, phone numbers, tokens, a
 });
 
 test('samples stay short: first two items of long lists', () => {
-  const s = sample({ data: [...Array(50)].map((_, i) => ({ id: i, name: 'Team ' + i })) });
+  const s = sample({ data: [...Array(50)].map((_, i) => ({ id: i, team: 'Team ' + i })) }); // not a market list
   assert.match(s, /\.\.\. 50 items/);
   assert.ok(s.length < 400);
 });
