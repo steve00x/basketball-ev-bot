@@ -653,24 +653,31 @@ const commands = {
 
   // login odibets: a visible OdiBets window to log in once (the session is saved for the bot)
   // login --fresh: forget the saved session first (after changing an account's phone or password)
-  login: () => ((positionals[1] ?? '').toLowerCase() === 'odibets' ? (async () => {
-    if (opt.fresh) fs.rmSync(s.odibetsSessionDir, { recursive: true, force: true });
-    const site = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: false, log });
-    await site.start();
-    log.info('log in to OdiBets in the window, then close it (the login is saved for the bot)');
-    await new Promise((r) => site.browser.on('disconnected', r));
-    const check = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: true, log });
-    try {
-      const b = await check.balance();
-      log[b.amount != null ? 'info' : 'warn'](b.amount != null ? `logged in to OdiBets, balance: KES ${b.amount}` : `OdiBets: ${b.reason}`);
-      return b.amount != null ? 0 : 1;
-    } finally { await check.close(); }
-  })() : opt.fresh ? (fs.rmSync(s.betikaSessionDir, { recursive: true, force: true }), log.info(`cleared the saved Betika session (${s.betikaSessionDir}) - logging in with the details in .env${opt.account ? `.${opt.account}` : ''}`)) : null, withBrowser(async (c) => {
-    log.info('complete any OTP/captcha in the browser window (3 min)...');
-    await c.ensureLoggedIn({ waitMs: 180_000 });
-    log.info(`logged in, balance: ${await c.readBalance().catch(() => null) ?? 'unknown'} - session saved to ${s.betikaSessionDir}`);
-    return 0;
-  }, { headless: false })),
+  login: async () => {
+    if ((positionals[1] ?? '').toLowerCase() === 'odibets') {
+      if (opt.fresh) fs.rmSync(s.odibetsSessionDir, { recursive: true, force: true });
+      const site = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: false, log });
+      await site.start();
+      log.info('log in to OdiBets in the window, then close it (the login is saved for the bot)');
+      await new Promise((r) => site.browser.on('disconnected', r));
+      const check = new OdiBetsSite({ sessionDir: s.odibetsSessionDir, chromePath: s.chromePath, headless: true, log });
+      try {
+        const b = await check.balance();
+        log[b.amount != null ? 'info' : 'warn'](b.amount != null ? `logged in to OdiBets, balance: KES ${b.amount}` : `OdiBets: ${b.reason}`);
+        return b.amount != null ? 0 : 1;
+      } finally { await check.close(); }
+    }
+    if (opt.fresh) {
+      fs.rmSync(s.betikaSessionDir, { recursive: true, force: true });
+      log.info(`cleared the saved Betika session (${s.betikaSessionDir}) - logging in with the details in .env${opt.account ? `.${opt.account}` : ''}`);
+    }
+    return withBrowser(async (c) => {
+      log.info('complete any OTP/captcha in the browser window (3 min)...');
+      await c.ensureLoggedIn({ waitMs: 180_000 });
+      log.info(`logged in, balance: ${await c.readBalance().catch(() => null) ?? 'unknown'} - session saved to ${s.betikaSessionDir}`);
+      return 0;
+    }, { headless: false });
+  },
 
   // Read the balance the way the bot does and show where on Betika's page it was found
   balance: () => (positionals[1] ?? '').toLowerCase() === 'odibets' ? (async () => {
